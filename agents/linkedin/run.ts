@@ -26,6 +26,9 @@ export const Linkedin_agent: LinkedinAgentRunner = async (
       systemPromptExtension: LINKEDIN_AGENT_SYSTEM_PROMPT,
       ...(parsedInput.sessionId ? { sessionId: parsedInput.sessionId } : {}),
       ...(parsedInput.maxSteps ? { maxSteps: parsedInput.maxSteps } : {}),
+      ...(process.env.LINKEDIN_PROFILE_ID && !parsedInput.sessionId
+        ? { sessionSettings: { profileId: process.env.LINKEDIN_PROFILE_ID } }
+        : {}),
     },
   );
 

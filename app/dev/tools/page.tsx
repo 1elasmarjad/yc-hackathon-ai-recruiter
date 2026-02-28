@@ -4,6 +4,21 @@ import { FormEvent, useMemo, useState } from "react";
 
 type RunStatus = "idle" | "running" | "success" | "error";
 type AgentId = "linkedin" | "twitter";
+type AgentApiStartResponse = {
+  taskId?: string;
+  sessionId?: string;
+  liveUrl?: string | null;
+  error?: string;
+};
+type AgentApiStatusResponse = {
+  status?: "running" | "completed" | "failed";
+  taskStatus?: string;
+  taskId?: string;
+  sessionId?: string;
+  liveUrl?: string | null;
+  markdown?: string;
+  error?: string;
+};
 
 type AgentDefinition = {
   id: AgentId;
@@ -36,6 +51,12 @@ const toPositiveIntegerOrUndefined = (value: string | null): number | undefined 
   }
 
   return parsed;
+};
+
+const sleep = async (durationMs: number): Promise<void> => {
+  await new Promise((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
 };
 
 const toStatusLabel = (status: RunStatus): string => {
@@ -108,18 +129,24 @@ export default function DevToolsPage() {
   const [selectedAgent, setSelectedAgent] = useState<AgentId>("linkedin");
 
   const [linkedinProfileUrl, setLinkedinProfileUrl] = useState<string | null>("");
-  const [linkedinSessionId, setLinkedinSessionId] = useState<string | null>("");
+  const [linkedinSessionIdInput, setLinkedinSessionIdInput] = useState<string | null>("");
   const [linkedinMaxSteps, setLinkedinMaxSteps] = useState<string | null>("80");
   const [linkedinStatus, setLinkedinStatus] = useState<RunStatus>("idle");
   const [linkedinError, setLinkedinError] = useState<string | null>(null);
   const [linkedinMarkdownOutput, setLinkedinMarkdownOutput] = useState<string | null>(null);
+  const [linkedinTaskId, setLinkedinTaskId] = useState<string | null>(null);
+  const [linkedinRunSessionId, setLinkedinRunSessionId] = useState<string | null>(null);
+  const [linkedinLiveUrl, setLinkedinLiveUrl] = useState<string | null>(null);
 
   const [twitterProfileUrlsInput, setTwitterProfileUrlsInput] = useState<string | null>("");
-  const [twitterSessionId, setTwitterSessionId] = useState<string | null>("");
+  const [twitterSessionIdInput, setTwitterSessionIdInput] = useState<string | null>("");
   const [twitterMaxSteps, setTwitterMaxSteps] = useState<string | null>("120");
   const [twitterStatus, setTwitterStatus] = useState<RunStatus>("idle");
   const [twitterError, setTwitterError] = useState<string | null>(null);
   const [twitterMarkdownOutput, setTwitterMarkdownOutput] = useState<string | null>(null);
+  const [twitterTaskId, setTwitterTaskId] = useState<string | null>(null);
+  const [twitterRunSessionId, setTwitterRunSessionId] = useState<string | null>(null);
+  const [twitterLiveUrl, setTwitterLiveUrl] = useState<string | null>(null);
 
   const linkedinIsRunning = linkedinStatus === "running";
   const twitterIsRunning = twitterStatus === "running";
@@ -129,21 +156,122 @@ export default function DevToolsPage() {
   const linkedinStatusLabel = useMemo(() => toStatusLabel(linkedinStatus), [linkedinStatus]);
   const twitterStatusLabel = useMemo(() => toStatusLabel(twitterStatus), [twitterStatus]);
 
+  const pollLinkedinTaskUntilDone = async (taskId: string) => {
+    const pollLimit = 240;
+
+    for (let pollIndex = 0; pollIndex < pollLimit; pollIndex += 1) {
+      const response = await fetch(
+        `/api/agents/linkedin/status?taskId=${encodeURIComponent(taskId)}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      );
+
+      const json = (await response.json()) as AgentApiStatusResponse;
+
+      if (!response.ok) {
+        setLinkedinStatus("error");
+        setLinkedinError(json.error ?? "Failed while checking Linkedin_agent status.");
+        return;
+      }
+
+      if (json.sessionId) {
+        setLinkedinRunSessionId(json.sessionId);
+      }
+
+      if (json.liveUrl) {
+        setLinkedinLiveUrl(json.liveUrl);
+      }
+
+      if (json.status === "running") {
+        await sleep(2500);
+        continue;
+      }
+
+      if (json.status === "completed" && json.markdown) {
+        setLinkedinStatus("success");
+        setLinkedinMarkdownOutput(json.markdown);
+        return;
+      }
+
+      setLinkedinStatus("error");
+      setLinkedinError(json.error ?? "Linkedin_agent stopped before completion.");
+      return;
+    }
+
+    setLinkedinStatus("error");
+    setLinkedinError("Linkedin_agent timed out while waiting for completion.");
+  };
+
+  const pollTwitterTaskUntilDone = async (taskId: string) => {
+    const pollLimit = 240;
+
+    for (let pollIndex = 0; pollIndex < pollLimit; pollIndex += 1) {
+      const response = await fetch(
+        `/api/agents/twitter/status?taskId=${encodeURIComponent(taskId)}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      );
+
+      const json = (await response.json()) as AgentApiStatusResponse;
+
+      if (!response.ok) {
+        setTwitterStatus("error");
+        setTwitterError(json.error ?? "Failed while checking Twitter_agent status.");
+        return;
+      }
+
+      if (json.sessionId) {
+        setTwitterRunSessionId(json.sessionId);
+      }
+
+      if (json.liveUrl) {
+        setTwitterLiveUrl(json.liveUrl);
+      }
+
+      if (json.status === "running") {
+        await sleep(2500);
+        continue;
+      }
+
+      if (json.status === "completed" && json.markdown) {
+        setTwitterStatus("success");
+        setTwitterMarkdownOutput(json.markdown);
+        return;
+      }
+
+      setTwitterStatus("error");
+      setTwitterError(json.error ?? "Twitter_agent stopped before completion.");
+      return;
+    }
+
+    setTwitterStatus("error");
+    setTwitterError("Twitter_agent timed out while waiting for completion.");
+  };
+
   const handleRunLinkedin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLinkedinStatus("running");
     setLinkedinError(null);
     setLinkedinMarkdownOutput(null);
+    setLinkedinTaskId(null);
+    setLinkedinRunSessionId(null);
+    setLinkedinLiveUrl(null);
 
     try {
       const body = {
         profileUrl: linkedinProfileUrl ?? "",
         sessionId:
-          linkedinSessionId && linkedinSessionId.trim() !== "" ? linkedinSessionId : undefined,
+          linkedinSessionIdInput && linkedinSessionIdInput.trim() !== ""
+            ? linkedinSessionIdInput
+            : undefined,
         maxSteps: toPositiveIntegerOrUndefined(linkedinMaxSteps),
       };
 
-      const response = await fetch("/api/agents/linkedin", {
+      const response = await fetch("/api/agents/linkedin/start", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -151,17 +279,20 @@ export default function DevToolsPage() {
         body: JSON.stringify(body),
       });
 
-      const json = (await response.json()) as { markdown?: string; error?: string };
+      const json = (await response.json()) as AgentApiStartResponse;
 
-      if (!response.ok || !json.markdown) {
-        const message = json.error ?? "Failed to run Linkedin_agent.";
+      if (!response.ok || !json.taskId || !json.sessionId) {
+        const message = json.error ?? "Failed to start Linkedin_agent.";
         setLinkedinStatus("error");
         setLinkedinError(message);
         return;
       }
 
-      setLinkedinStatus("success");
-      setLinkedinMarkdownOutput(json.markdown);
+      setLinkedinTaskId(json.taskId);
+      setLinkedinRunSessionId(json.sessionId);
+      setLinkedinLiveUrl(json.liveUrl ?? null);
+
+      await pollLinkedinTaskUntilDone(json.taskId);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unexpected error.";
       setLinkedinStatus("error");
@@ -174,6 +305,9 @@ export default function DevToolsPage() {
     setTwitterStatus("running");
     setTwitterError(null);
     setTwitterMarkdownOutput(null);
+    setTwitterTaskId(null);
+    setTwitterRunSessionId(null);
+    setTwitterLiveUrl(null);
 
     const profileUrls = parseTwitterProfileUrls(twitterProfileUrlsInput);
 
@@ -186,11 +320,14 @@ export default function DevToolsPage() {
     try {
       const body = {
         profileUrls,
-        sessionId: twitterSessionId && twitterSessionId.trim() !== "" ? twitterSessionId : undefined,
+        sessionId:
+          twitterSessionIdInput && twitterSessionIdInput.trim() !== ""
+            ? twitterSessionIdInput
+            : undefined,
         maxSteps: toPositiveIntegerOrUndefined(twitterMaxSteps),
       };
 
-      const response = await fetch("/api/agents/twitter", {
+      const response = await fetch("/api/agents/twitter/start", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -198,17 +335,20 @@ export default function DevToolsPage() {
         body: JSON.stringify(body),
       });
 
-      const json = (await response.json()) as { markdown?: string; error?: string };
+      const json = (await response.json()) as AgentApiStartResponse;
 
-      if (!response.ok || !json.markdown) {
-        const message = json.error ?? "Failed to run Twitter_agent.";
+      if (!response.ok || !json.taskId || !json.sessionId) {
+        const message = json.error ?? "Failed to start Twitter_agent.";
         setTwitterStatus("error");
         setTwitterError(message);
         return;
       }
 
-      setTwitterStatus("success");
-      setTwitterMarkdownOutput(json.markdown);
+      setTwitterTaskId(json.taskId);
+      setTwitterRunSessionId(json.sessionId);
+      setTwitterLiveUrl(json.liveUrl ?? null);
+
+      await pollTwitterTaskUntilDone(json.taskId);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unexpected error.";
       setTwitterStatus("error");
@@ -280,8 +420,8 @@ export default function DevToolsPage() {
                       Session ID (optional)
                       <input
                         type="text"
-                        value={linkedinSessionId ?? ""}
-                        onChange={(event) => setLinkedinSessionId(event.target.value)}
+                        value={linkedinSessionIdInput ?? ""}
+                        onChange={(event) => setLinkedinSessionIdInput(event.target.value)}
                         placeholder="reuse Browser Use session id"
                         className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none ring-cyan-400/40 focus:ring-2"
                       />
@@ -317,6 +457,38 @@ export default function DevToolsPage() {
                     {linkedinError}
                   </div>
                 ) : null}
+              </section>
+
+              <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+                <h3 className="text-lg font-semibold">Live Session</h3>
+                <p className="mt-1 text-xs text-slate-400">
+                  Session ID: {linkedinRunSessionId ?? "Not started yet"}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">Task ID: {linkedinTaskId ?? "N/A"}</p>
+
+                {linkedinLiveUrl ? (
+                  <>
+                    <a
+                      href={linkedinLiveUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 inline-block text-xs text-cyan-300 underline underline-offset-2"
+                    >
+                      Open live session in a new tab
+                    </a>
+                    <div className="mt-3 overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+                      <iframe
+                        title="LinkedIn live session viewer"
+                        src={linkedinLiveUrl}
+                        className="h-[460px] w-full"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-300">
+                    Start a run to load the live session viewer.
+                  </p>
+                )}
               </section>
 
               <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
@@ -374,8 +546,8 @@ export default function DevToolsPage() {
                       Session ID (optional)
                       <input
                         type="text"
-                        value={twitterSessionId ?? ""}
-                        onChange={(event) => setTwitterSessionId(event.target.value)}
+                        value={twitterSessionIdInput ?? ""}
+                        onChange={(event) => setTwitterSessionIdInput(event.target.value)}
                         placeholder="reuse Browser Use session id"
                         className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none ring-cyan-400/40 focus:ring-2"
                       />
@@ -411,6 +583,38 @@ export default function DevToolsPage() {
                     {twitterError}
                   </div>
                 ) : null}
+              </section>
+
+              <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+                <h3 className="text-lg font-semibold">Live Session</h3>
+                <p className="mt-1 text-xs text-slate-400">
+                  Session ID: {twitterRunSessionId ?? "Not started yet"}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">Task ID: {twitterTaskId ?? "N/A"}</p>
+
+                {twitterLiveUrl ? (
+                  <>
+                    <a
+                      href={twitterLiveUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 inline-block text-xs text-cyan-300 underline underline-offset-2"
+                    >
+                      Open live session in a new tab
+                    </a>
+                    <div className="mt-3 overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+                      <iframe
+                        title="Twitter live session viewer"
+                        src={twitterLiveUrl}
+                        className="h-[460px] w-full"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-300">
+                    Start a run to load the live session viewer.
+                  </p>
+                )}
               </section>
 
               <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
