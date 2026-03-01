@@ -8,6 +8,7 @@ import {
   useState,
   type ReactElement,
 } from "react";
+import { CheckCircle2, XCircle } from "lucide-react";
 import { ConvexProvider, ConvexReactClient, useQuery } from "convex/react";
 import type { Id } from "@/convex/_generated/dataModel";
 import { api } from "@/convex/_generated/api";
@@ -42,6 +43,7 @@ function WorkflowsDashboard(): ReactElement {
   const [targetUrl, setTargetUrl] = useState<string | null>("");
   const [totalPages, setTotalPages] = useState<string | null>("1");
   const [workflowName, setWorkflowName] = useState<string | null>("");
+  const [aiCriteria, setAiCriteria] = useState<string | null>("");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<Id<"workflows"> | null>(null);
@@ -163,6 +165,7 @@ function WorkflowsDashboard(): ReactElement {
           targetUrl: normalizedTargetUrl,
           totalPages: parsedTotalPages,
           name: workflowName?.trim() ? workflowName.trim() : undefined,
+          aiCriteria: aiCriteria?.trim() ? aiCriteria.trim() : undefined,
         }),
       });
 
@@ -181,6 +184,7 @@ function WorkflowsDashboard(): ReactElement {
       setTargetUrl("");
       setTotalPages("1");
       setWorkflowName("");
+      setAiCriteria("");
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to start workflow.";
       setSubmissionError(message);
@@ -246,6 +250,20 @@ function WorkflowsDashboard(): ReactElement {
                 placeholder="Hiring Sprint - AI Engineers"
                 className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none ring-cyan-400/40 focus:ring-2"
               />
+            </label>
+
+            <label className="flex flex-col gap-2 text-sm lg:col-span-4">
+              AI Criteria (optional)
+              <textarea
+                value={aiCriteria ?? ""}
+                onChange={(event) => setAiCriteria(event.target.value)}
+                placeholder="e.g. Must have production AI experience, published papers, and 500+ GitHub stars"
+                rows={3}
+                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none ring-cyan-400/40 focus:ring-2 resize-y"
+              />
+              <span className="text-xs text-slate-400">
+                Your prompt is automatically split into individual criteria. Each candidate is assessed against every criterion.
+              </span>
             </label>
 
             <div className="lg:col-span-4 flex items-center gap-3">
@@ -386,6 +404,69 @@ function WorkflowsDashboard(): ReactElement {
                 </div>
               ) : null}
             </section>
+
+            {selectedWorkflow?.aiCriteria && selectedWorkflowCandidates.some((c) => c.assessmentResult) ? (
+              <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+                <h2 className="text-lg font-semibold">Assessment Results</h2>
+                <p className="mt-2 text-xs text-slate-400">
+                  Candidates assessed against: <span className="text-slate-200">{selectedWorkflow.aiCriteria}</span>
+                </p>
+
+                <div className="mt-4 space-y-3">
+                  {selectedWorkflowCandidates
+                    .filter((c) => c.assessmentResult)
+                    .map((candidate) => {
+                      const assessment = candidate.assessmentResult!;
+                      const metCount = assessment.criteriaResults.filter((cr) => cr.isFit).length;
+
+                      return (
+                        <div
+                          key={candidate._id}
+                          className="rounded-xl border border-slate-800 bg-slate-950 p-4"
+                        >
+                          <div className="flex items-center gap-3">
+                            {assessment.isFit ? (
+                              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+                            ) : (
+                              <XCircle className="h-5 w-5 shrink-0 text-red-400" />
+                            )}
+                            <span className="text-sm font-semibold text-slate-100">
+                              {candidate.name ?? candidate.sourceCandidateId}
+                            </span>
+                            <span className="text-xs text-slate-400">
+                              {metCount}/{assessment.criteriaResults.length} criteria met
+                            </span>
+                          </div>
+
+                          <div className="mt-3 divide-y divide-slate-800 rounded-lg border border-slate-800">
+                            {assessment.criteriaResults.map((cr, idx) => (
+                              <div key={idx} className="flex items-start gap-2.5 px-3 py-2">
+                                {cr.isFit ? (
+                                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                                ) : (
+                                  <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+                                )}
+                                <div className="min-w-0">
+                                  <p className="text-xs text-slate-200">{cr.criterion}</p>
+                                  {cr.evidence.length > 0 ? (
+                                    <ul className="mt-1 space-y-0.5">
+                                      {cr.evidence.map((e, eIdx) => (
+                                        <li key={eIdx} className="text-[11px] text-slate-400">
+                                          &mdash; {e}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </section>
+            ) : null}
 
             <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
               <h2 className="text-lg font-semibold">Active Live URLs</h2>

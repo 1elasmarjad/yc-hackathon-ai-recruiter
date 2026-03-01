@@ -85,6 +85,7 @@ export async function POST(request: Request): Promise<Response> {
       targetUrl: parsed.data.targetUrl,
       totalPages: parsed.data.totalPages,
       candidateConcurrency,
+      aiCriteria: parsed.data.aiCriteria,
     });
 
     void runWorkflowPipeline({
@@ -93,6 +94,7 @@ export async function POST(request: Request): Promise<Response> {
       targetUrl: parsed.data.targetUrl,
       totalPages: parsed.data.totalPages,
       candidateConcurrency,
+      aiCriteria: parsed.data.aiCriteria,
     }).catch((error: unknown) => {
       console.error("[workflow] detached pipeline crashed", error);
     });

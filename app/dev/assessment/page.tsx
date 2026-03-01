@@ -1,12 +1,19 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import { CheckCircle2, XCircle } from "lucide-react";
 
 type RunStatus = "idle" | "running" | "success" | "error";
 
-type AssessmentResponse = {
+type CriterionResult = {
+  criterion: string;
   isFit: boolean;
   evidence: string[];
+};
+
+type AssessmentResponse = {
+  isFit: boolean;
+  criteriaResults: CriterionResult[];
 };
 
 type UploadedCandidateDoc = {
@@ -118,13 +125,13 @@ export default function AssessmentDevPage() {
         throw new Error(json.error ?? "Assessment request failed.");
       }
 
-      if (typeof json.isFit !== "boolean" || !Array.isArray(json.evidence)) {
+      if (typeof json.isFit !== "boolean" || !Array.isArray(json.criteriaResults)) {
         throw new Error("Assessment response was not valid JSON shape.");
       }
 
       setResult({
         isFit: json.isFit,
-        evidence: json.evidence,
+        criteriaResults: json.criteriaResults,
       });
       setStatus("success");
     } catch (error: unknown) {
@@ -223,20 +230,51 @@ export default function AssessmentDevPage() {
           ) : null}
 
           {result ? (
-            <div className="mt-4 space-y-3">
-              <div
-                className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                  result.isFit
-                    ? "bg-emerald-400/20 text-emerald-200"
-                    : "bg-amber-400/20 text-amber-200"
-                }`}
-              >
-                {result.isFit ? "Fit" : "Not Fit"}
+            <div className="mt-4 space-y-4">
+              <div className="flex items-center gap-3">
+                {result.isFit ? (
+                  <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+                ) : (
+                  <XCircle className="h-6 w-6 text-red-400" />
+                )}
+                <span className="text-lg font-semibold">
+                  {result.isFit ? "Overall: Fit" : "Overall: Not Fit"}
+                </span>
+                <span className="text-sm text-neutral-400">
+                  {result.criteriaResults.filter((c) => c.isFit).length}/{result.criteriaResults.length} criteria met
+                </span>
               </div>
 
-              <pre className="overflow-x-auto rounded-xl border border-neutral-700 bg-neutral-950 p-4 text-xs leading-relaxed text-neutral-200">
-                {resultJson}
-              </pre>
+              <div className="rounded-xl border border-neutral-700 bg-neutral-950 divide-y divide-neutral-800">
+                {result.criteriaResults.map((cr, idx) => (
+                  <div key={idx} className="flex items-start gap-3 px-4 py-3">
+                    {cr.isFit ? (
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
+                    ) : (
+                      <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm text-neutral-100">{cr.criterion}</p>
+                      {cr.evidence.length > 0 ? (
+                        <ul className="mt-1 space-y-0.5">
+                          {cr.evidence.map((e, eIdx) => (
+                            <li key={eIdx} className="text-xs text-neutral-400">
+                              &mdash; {e}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <details className="text-xs text-neutral-500">
+                <summary className="cursor-pointer hover:text-neutral-300">Raw JSON</summary>
+                <pre className="mt-2 overflow-x-auto rounded-xl border border-neutral-700 bg-neutral-950 p-4 leading-relaxed text-neutral-200">
+                  {resultJson}
+                </pre>
+              </details>
             </div>
           ) : null}
         </section>

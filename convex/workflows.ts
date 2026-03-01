@@ -37,6 +37,7 @@ export const createWorkflow = mutation({
     targetUrl: v.string(),
     totalPages: v.number(),
     candidateConcurrency: v.number(),
+    aiCriteria: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -46,6 +47,7 @@ export const createWorkflow = mutation({
       source: "juicebox",
       targetUrl: args.targetUrl,
       totalPages: args.totalPages,
+      aiCriteria: args.aiCriteria,
       status: "running",
       startedAt: now,
       candidateConcurrency: args.candidateConcurrency,
@@ -206,6 +208,33 @@ export const setCandidateStatus = mutation({
     }
 
     await ctx.db.patch(candidate.workflowId, workflowUpdates);
+  },
+});
+
+export const setCandidateAssessment = mutation({
+  args: {
+    candidateId: v.id("candidates"),
+    assessment: v.object({
+      isFit: v.boolean(),
+      criteriaResults: v.array(
+        v.object({
+          criterion: v.string(),
+          isFit: v.boolean(),
+          evidence: v.array(v.string()),
+        }),
+      ),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const candidate = await ctx.db.get(args.candidateId);
+
+    if (!candidate) {
+      throw new Error(`Candidate ${args.candidateId} not found.`);
+    }
+
+    await ctx.db.patch(args.candidateId, {
+      assessmentResult: args.assessment,
+    });
   },
 });
 

@@ -12,11 +12,31 @@ const CandidateMarkdownInputSchema = z.union([
   z.array(z.string().trim().min(1)).min(1),
 ]);
 
-const AssessmentResultSchema = z.object({
+const CriteriaListSchema = z.object({
+  criteria: z
+    .array(z.string().trim().min(1))
+    .min(1)
+    .describe("Individual assessment criteria extracted from the user prompt."),
+});
+
+const SingleCriterionResultSchema = z.object({
   isFit: z.boolean(),
   evidence: z
     .array(z.string().trim().min(1))
     .describe("Short evidence snippets pulled from the candidate markdown."),
+});
+
+const CriterionResultSchema = z.object({
+  criterion: z.string(),
+  isFit: z.boolean(),
+  evidence: z
+    .array(z.string().trim().min(1))
+    .describe("Short evidence snippets pulled from the candidate markdown."),
+});
+
+const AssessmentResultSchema = z.object({
+  isFit: z.boolean().describe("True only when ALL individual criteria are met."),
+  criteriaResults: z.array(CriterionResultSchema),
 });
 
 const AssessmentArgsSchema = z.object({
@@ -24,11 +44,22 @@ const AssessmentArgsSchema = z.object({
   candidateMarkdown: CandidateMarkdownInputSchema,
 });
 
-type AssessmentResult = z.output<typeof AssessmentResultSchema>;
+export type CriterionResult = z.output<typeof CriterionResultSchema>;
+export type AssessmentResult = z.output<typeof AssessmentResultSchema>;
+
+const CRITERIA_SPLIT_SYSTEM_PROMPT = `
+You are a recruiting criteria analyst.
+Given a hiring prompt, split it into individual, independent assessment criteria.
+Rules:
+1. Each criterion should be a single, specific, assessable requirement.
+2. Preserve the intent and specificity of the original prompt.
+3. If the prompt is already a single criterion, return it as a one-element array.
+4. Do not add criteria that are not in the original prompt.
+`.trim();
 
 const ASSESSMENT_SYSTEM_PROMPT = `
 You are a strict AI recruiting assessor.
-Decide if a candidate fits the given AI hiring criteria.
+Decide if a candidate fits the given hiring criterion.
 Rules:
 1. Return only fields defined by schema.
 2. Set isFit to true only when there is concrete support in the candidate markdown.
@@ -43,21 +74,89 @@ function normalizeMarkdownInput(
   return Array.isArray(parsed) ? parsed : [parsed];
 }
 
-function buildAssessmentPrompt(aiCriteria: string, candidateMarkdown: string[]): string {
+function buildAssessmentPrompt(criterion: string, candidateMarkdown: string[]): string {
   const docs = candidateMarkdown
     .map((markdown, index) => `### Candidate Markdown ${index + 1}\n${markdown}`)
     .join("\n\n");
 
   return `
-Assess if this candidate fits the AI criteria below.
+Assess if this candidate fits the criterion below.
 
-## AI Criteria
-${aiCriteria}
+## Criterion
+${criterion}
 
 ## Candidate Data
 ${docs}
 `.trim();
 }
+
+function createAIGateway() {
+  const apiKey = process.env.AI_GATEWAY_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "Missing AI_GATEWAY_API_KEY in environment. Add it to your Convex environment variables.",
+    );
+  }
+  return createGateway({ apiKey });
+}
+
+async function splitCriteriaFromPrompt(
+  gateway: ReturnType<typeof createGateway>,
+  aiCriteria: string,
+): Promise<string[]> {
+  const { output } = await generateText({
+    model: gateway(DEFAULT_ASSESSMENT_MODEL),
+    system: CRITERIA_SPLIT_SYSTEM_PROMPT,
+    prompt: `Split the following hiring prompt into individual assessment criteria:\n\n${aiCriteria}`,
+    temperature: 0,
+    output: Output.object({
+      schema: CriteriaListSchema,
+    }),
+  });
+
+  return output.criteria;
+}
+
+async function assessSingleCriterion(
+  gateway: ReturnType<typeof createGateway>,
+  criterion: string,
+  candidateMarkdown: string[],
+): Promise<z.output<typeof SingleCriterionResultSchema>> {
+  const { output } = await generateText({
+    model: gateway(DEFAULT_ASSESSMENT_MODEL),
+    system: ASSESSMENT_SYSTEM_PROMPT,
+    prompt: buildAssessmentPrompt(criterion, candidateMarkdown),
+    temperature: 0,
+    output: Output.object({
+      schema: SingleCriterionResultSchema,
+    }),
+  });
+
+  if (output.isFit && output.evidence.length === 0) {
+    throw new Error("Invalid model output: evidence is required when isFit is true.");
+  }
+
+  if (!output.isFit && output.evidence.length > 0) {
+    throw new Error("Invalid model output: evidence must be empty when isFit is false.");
+  }
+
+  return output;
+}
+
+export const splitCriteria = action({
+  args: {
+    aiCriteria: v.string(),
+  },
+  handler: async (_ctx, args): Promise<string[]> => {
+    const trimmed = args.aiCriteria.trim();
+    if (trimmed.length === 0) {
+      throw new Error("aiCriteria must not be empty.");
+    }
+
+    const gateway = createAIGateway();
+    return await splitCriteriaFromPrompt(gateway, trimmed);
+  },
+});
 
 export const assessCandidateFit = action({
   args: {
@@ -66,35 +165,20 @@ export const assessCandidateFit = action({
   },
   handler: async (_ctx, args): Promise<AssessmentResult> => {
     const parsedArgs = AssessmentArgsSchema.parse(args);
-
-    const apiKey = process.env.AI_GATEWAY_API_KEY;
-    if (!apiKey) {
-      throw new Error(
-        "Missing AI_GATEWAY_API_KEY in environment. Add it to your Convex environment variables.",
-      );
-    }
-
-    const gateway = createGateway({ apiKey });
+    const gateway = createAIGateway();
     const normalizedMarkdown = normalizeMarkdownInput(parsedArgs.candidateMarkdown);
 
-    const { output } = await generateText({
-      model: gateway(DEFAULT_ASSESSMENT_MODEL),
-      system: ASSESSMENT_SYSTEM_PROMPT,
-      prompt: buildAssessmentPrompt(parsedArgs.aiCriteria, normalizedMarkdown),
-      temperature: 0,
-      output: Output.object({
-        schema: AssessmentResultSchema,
+    const criteria = await splitCriteriaFromPrompt(gateway, parsedArgs.aiCriteria);
+
+    const criteriaResults: CriterionResult[] = await Promise.all(
+      criteria.map(async (criterion) => {
+        const result = await assessSingleCriterion(gateway, criterion, normalizedMarkdown);
+        return { criterion, ...result };
       }),
-    });
+    );
 
-    if (output.isFit && output.evidence.length === 0) {
-      throw new Error("Invalid model output: evidence is required when isFit is true.");
-    }
+    const isFit = criteriaResults.every((r) => r.isFit);
 
-    if (!output.isFit && output.evidence.length > 0) {
-      throw new Error("Invalid model output: evidence must be empty when isFit is false.");
-    }
-
-    return output;
+    return { isFit, criteriaResults };
   },
 });

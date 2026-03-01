@@ -34,6 +34,7 @@ export default defineSchema({
     source: v.literal("juicebox"),
     targetUrl: v.string(),
     totalPages: v.number(),
+    aiCriteria: v.optional(v.string()),
     status: workflowStatusValidator,
     error: v.optional(v.string()),
     startedAt: v.number(),
@@ -57,6 +58,18 @@ export default defineSchema({
     createdAt: v.number(),
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
+    assessmentResult: v.optional(
+      v.object({
+        isFit: v.boolean(),
+        criteriaResults: v.array(
+          v.object({
+            criterion: v.string(),
+            isFit: v.boolean(),
+            evidence: v.array(v.string()),
+          }),
+        ),
+      }),
+    ),
   })
     .index("by_workflow", ["workflowId"])
     .index("by_workflow_status", ["workflowId", "status"])

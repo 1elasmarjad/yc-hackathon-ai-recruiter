@@ -35,12 +35,14 @@ type RunWorkflowPipelineInput = {
   targetUrl: string;
   totalPages: number;
   candidateConcurrency: number;
+  aiCriteria?: string;
 };
 
 type AgentExecutionResult = {
   agentType: WorkflowAgentType;
   success: boolean;
   error: string | null;
+  resultMarkdown: string | null;
 };
 
 type BrowserUseRunContext = {
@@ -267,6 +269,7 @@ async function executeBrowserUseAgentRun(
       agentType: input.agentType,
       success: true,
       error: null,
+      resultMarkdown: result.result,
     };
   } catch (error: unknown) {
     const message = toErrorMessage(error);
@@ -283,6 +286,7 @@ async function executeBrowserUseAgentRun(
       agentType: input.agentType,
       success: false,
       error: message,
+      resultMarkdown: null,
     };
   }
 }
@@ -295,6 +299,7 @@ async function processCandidate(
     candidate: CandidateSnapshot;
     browserUseApiKey: string;
     firecrawlClient: Firecrawl;
+    aiCriteria?: string;
   },
 ): Promise<void> {
   await convex.mutation(api.workflows.setCandidateStatus, {
@@ -450,6 +455,24 @@ async function processCandidate(
     return;
   }
 
+  if (input.aiCriteria) {
+    const successfulMarkdowns = results
+      .filter((r) => r.success && r.resultMarkdown)
+      .map((r) => r.resultMarkdown!);
+
+    if (successfulMarkdowns.length > 0) {
+      const assessment = await convex.action(api.assessment.assessCandidateFit, {
+        aiCriteria: input.aiCriteria,
+        candidateMarkdown: successfulMarkdowns,
+      });
+
+      await convex.mutation(api.workflows.setCandidateAssessment, {
+        candidateId: input.candidateId,
+        assessment,
+      });
+    }
+  }
+
   await convex.mutation(api.workflows.setCandidateStatus, {
     candidateId: input.candidateId,
     status: "completed",
@@ -505,6 +528,7 @@ export async function runWorkflowPipeline(input: RunWorkflowPipelineInput): Prom
               candidate,
               browserUseApiKey,
               firecrawlClient,
+              aiCriteria: input.aiCriteria,
             });
           } catch (error: unknown) {
             await convex.mutation(api.workflows.setCandidateStatus, {
