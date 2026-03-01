@@ -1,72 +1,38 @@
-import type { LinkedinAgentStructuredOutput } from "./schema";
+import { LinkedinAgentStructuredOutput } from "./schema";
 
-const formatOptional = (value: string | number | null): string => {
-  if (value === null) {
-    return "N/A";
-  }
+export const toLinkedinMarkdown = (data: LinkedinAgentStructuredOutput): string => {
+    const lines: string[] = [];
 
-  return String(value);
-};
+    lines.push(`# LinkedIn Profile: ${data.name || "Unknown"}`);
+    lines.push(`URL: ${data.profileUrl}`);
 
-export const toLinkedinMarkdown = (
-  data: LinkedinAgentStructuredOutput,
-): string => {
-  const lines: string[] = [];
+    if (data.headline) lines.push(`**Headline:** ${data.headline}`);
+    if (data.location) lines.push(`**Location:** ${data.location}`);
+    if (data.about) lines.push(`\n## About\n${data.about}`);
 
-  lines.push("# LinkedIn Scrape Report");
-  lines.push("");
-  lines.push(`- Profile URL: ${data.profileUrl}`);
-  lines.push("");
-  lines.push("## Posts");
+    if (data.activity && data.activity.length > 0) {
+        lines.push(`\n## Activity`);
+        data.activity.forEach(a => lines.push(`- ${a}`));
+    }
 
-  if (data.posts.length === 0) {
-    lines.push("No posts collected.");
-  } else {
-    data.posts.forEach((post, index) => {
-      lines.push("");
-      lines.push(`### Post ${index + 1}`);
-      lines.push(`- Source: ${post.source}`);
-      lines.push(`- Content: ${post.content}`);
-      lines.push(`- Published At: ${formatOptional(post.publishedAt)}`);
-      lines.push(`- Reactions: ${formatOptional(post.reactionCount)}`);
-      lines.push(`- Comments: ${formatOptional(post.commentCount)}`);
-    });
-  }
+    if (data.projects && data.projects.length > 0) {
+        lines.push(`\n## Projects`);
+        data.projects.forEach(p => {
+            lines.push(`### ${p.name}`);
+            if (p.description) lines.push(p.description);
+            if (p.url) lines.push(`[Link](${p.url})`);
+        });
+    }
 
-  lines.push("");
-  lines.push("## Experience");
+    if (data.interests) {
+        lines.push(`\n## Interests Summary`);
+        lines.push(data.interests);
+    }
 
-  if (data.experience.length === 0) {
-    lines.push("No experience entries collected.");
-  } else {
-    data.experience.forEach((item, index) => {
-      lines.push("");
-      lines.push(`### Experience ${index + 1}`);
-      lines.push(`- Title: ${item.title}`);
-      lines.push(`- Company: ${formatOptional(item.company)}`);
-      lines.push(`- Date Range: ${formatOptional(item.dateRange)}`);
-      lines.push(`- Location: ${formatOptional(item.location)}`);
-      lines.push(`- Description: ${formatOptional(item.description)}`);
-    });
-  }
+    if (data.images && data.images.length > 0) {
+        lines.push(`\n## Images`);
+        data.images.forEach(img => lines.push(`![](${img})`));
+    }
 
-  lines.push("");
-  lines.push("## Projects");
-
-  if (data.projects.length === 0) {
-    lines.push("No projects collected.");
-  } else {
-    data.projects.forEach((project, index) => {
-      lines.push("");
-      lines.push(`### Project ${index + 1}`);
-      lines.push(`- Name: ${project.name}`);
-      lines.push(`- Description: ${formatOptional(project.description)}`);
-      lines.push(`- Date Range: ${formatOptional(project.dateRange)}`);
-      lines.push(`- Link: ${formatOptional(project.link)}`);
-    });
-  }
-
-  lines.push("");
-
-  return lines.join("\n");
+    return lines.join("\n");
 };
