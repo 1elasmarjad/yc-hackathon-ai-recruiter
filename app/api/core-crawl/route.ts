@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { coreCrawl } from "@/lib/core/core-crawl";
+import type { CoreUserPayload } from "@/lib/core/user-payload";
 
 export const runtime = "nodejs";
 
 type CoreCrawlRequestBody = {
   targetUrl?: unknown;
   totalPages?: unknown;
+};
+
+type InvalidCorePayload = {
+  error: string;
+  payload: unknown;
 };
 
 function toPositiveInt(value: unknown): number | null {
@@ -62,15 +68,22 @@ export async function POST(request: Request): Promise<Response> {
 
   let profileCaptureDir: string | null = null;
   let browserUseUrl: string | null = null;
-  const payloads: unknown[] = [];
+  const payloads: CoreUserPayload[] = [];
+  const rawPayloads: unknown[] = [];
+  const invalidPayloads: InvalidCorePayload[] = [];
 
   try {
     const result = await coreCrawl({
       targetUrl,
       profileId,
       totalPages,
-      onUserPayload: async (payload) => {
+      onUserPayload: async (payload, rawPayload) => {
         payloads.push(payload);
+        rawPayloads.push(rawPayload);
+      },
+      onInvalidUserPayload: async (payload, errorMessage) => {
+        invalidPayloads.push({ error: errorMessage, payload });
+        rawPayloads.push(payload);
       },
       onBrowserUseUrl: async (url) => {
         browserUseUrl = url;
@@ -83,9 +96,12 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({
       browserUseUrl: browserUseUrl ?? result.browserUseUrl,
       payloadCount: result.payloadCount,
+      invalidPayloadCount: result.invalidPayloadCount,
       profileCaptureDir: profileCaptureDir ?? result.profileCaptureDir,
       captureStats: result.captureStats,
       payloads,
+      rawPayloads,
+      invalidPayloads,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

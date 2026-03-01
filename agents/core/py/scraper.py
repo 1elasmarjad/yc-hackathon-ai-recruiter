@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import json
 import os
-import random
 import time
 import urllib.error
 import urllib.request
@@ -11,17 +10,13 @@ from pathlib import Path
 from typing import Any
 from browser_use import Agent, Browser, ChatBrowserUse
 from playwright.async_api import async_playwright
-from cdp_capture import CoreProfileCdpCapture
+from cdp_capture import JuiceboxProfileCdpCapture
 
 CDP_CONNECT_MAX_ATTEMPTS = 5
 CDP_CONNECT_RETRY_SECONDS = 1
 NEXT_BUTTON_STABILIZATION_WAIT_MS = 2_000
-PAGE_MONITOR_WAIT_MIN_SECONDS = 6
-PAGE_MONITOR_WAIT_MAX_SECONDS = 20
 CAPTURE_DIRNAME = "captures"
-SAVE_CDP_ENV_VAR = "SAVE_CORE_CDP_LOCALLY_DEV"
-PROFILE_MATCH_SUBSTRING_ENV_VAR = "CORE_PROFILE_MATCH_SUBSTRING"
-DEFAULT_PROFILE_MATCH_SUBSTRING = "/api/search"
+SAVE_CDP_ENV_VAR = "SAVE_JUICEBOX_CDP_LOCALLY_DEV"
 BROWSER_USE_URL_PREFIX = "SCRAPER_BROWSER_USE_URL="
 BROWSER_CAPTURE_STATS_PREFIX = "SCRAPER_CAPTURE_STATS="
 BROWSER_USE_URL_MAX_ATTEMPTS = 4
@@ -38,32 +33,6 @@ def require_env(name: str) -> str:
 def is_local_cdp_save_enabled() -> bool:
     value = os.getenv(SAVE_CDP_ENV_VAR, "").strip().lower()
     return value in {"1", "true", "yes", "on"}
-
-
-def get_profile_match_substring() -> str:
-    value = os.getenv(PROFILE_MATCH_SUBSTRING_ENV_VAR, "").strip()
-    if value:
-        return value
-    return DEFAULT_PROFILE_MATCH_SUBSTRING
-
-
-def get_login_prompt(target_url: str) -> str:
-    return f"""Follow these steps to navigate to Core search results and log in.
-
-1. Go to: {target_url}
-
-2. Login (if prompted):
-   - Click "continue with email"
-   - Click "login" beside "Already have an account?"
-   - Enter email: x_user
-   - Enter password: x_pass
-   - Submit the login form
-
-3. Once logged in (or if already logged in), confirm you can see the search results page with candidate profile cards.
-
-IMPORTANT OUTPUT INSTRUCTIONS:
-- Return ONLY a JSON object: {{ "loginReady": true }}
-- Do not include any extra text outside of the JSON object.""".strip()
 
 
 def resolve_browser_use_live_url(session_id: str) -> str | None:
@@ -102,6 +71,37 @@ def resolve_browser_use_live_url(session_id: str) -> str | None:
             return None
 
     return None
+
+
+def get_login_prompt(target_url: str) -> str:
+    return f"""Follow these steps to navigate to Juicebox search results and log in.
+
+1. Go to: {target_url}
+
+2. Login (if prompted):
+   - Click "continue with email"
+   - Click "login" beside "Already have an account?"
+   - Enter email: x_user
+   - Enter password: x_pass
+   - Submit the login form
+
+3. Once logged in (or if already logged in), confirm you can see the search results page with candidate profile cards.
+
+IMPORTANT OUTPUT INSTRUCTIONS:
+- Return ONLY a JSON object: {{ "loginReady": true }}
+- Do not include any extra text outside of the JSON object.""".strip()
+
+
+def get_scrape_prompt() -> str:
+    return """Follow these steps to click through all candidate profiles on the current Juicebox search results page.
+
+NOTE: START AT TOP OF THE PAGE YOU LOAD INTO BY DEFAULT AND COUNT UP.
+
+For each profile card visible in the list:
+  - Skip any profiles marked as "hidden"
+  - Click the profile card to open the right sidebar (DO NOT CLICK THE HIDE BUTTON IN ANY CIRCUMSTANCES)
+
+Once you have clicked through all profile cards on the current page, you are done.""".strip()
 
 
 async def get_active_context_page(context) -> object:
@@ -192,7 +192,7 @@ async def click_next_page(cdp_url: str, current_page: int) -> None:
             if not clicked_next:
                 raise RuntimeError(
                     "Next control not found or not clickable "
-                    f"after page {current_page}"
+                    f"after scraping page {current_page}"
                 )
 
             print(
@@ -210,12 +210,12 @@ async def click_next_page(cdp_url: str, current_page: int) -> None:
             await pw_browser.close()
 
 
-async def main(core_url: str, profile_id: str, total_pages: int):
-    print(f"[Scraper] Starting for {core_url}", flush=True)
+async def main(juicebox_url: str, profile_id: str, total_pages: int):
+    print(f"[Scraper] Starting for {juicebox_url}", flush=True)
     email = require_env("CORE_EMAIL")
     password = require_env("CORE_PASSWORD")
     browser_use_api_key = require_env("BROWSER_USE_API_KEY")
-    profile_match_substring = get_profile_match_substring()
+    scrape_prompt = get_scrape_prompt()
 
     llm = ChatBrowserUse(model="bu-2-0", api_key=browser_use_api_key)
 
@@ -249,7 +249,7 @@ async def main(core_url: str, profile_id: str, total_pages: int):
             print(f"{BROWSER_USE_URL_PREFIX}{live_url}", flush=True)
 
     agent = Agent(
-        task=get_login_prompt(core_url),
+        task=get_login_prompt(juicebox_url),
         browser=browser,
         llm=llm,
         sensitive_data={
@@ -271,26 +271,25 @@ async def main(core_url: str, profile_id: str, total_pages: int):
             f"SCRAPER_USER_PAYLOAD={json.dumps(payload, ensure_ascii=True)}", flush=True
         )
 
-    cdp_capture: CoreProfileCdpCapture | None = None
+    cdp_capture: JuiceboxProfileCdpCapture | None = None
     try:
+        await agent.run()
+        print("[Scraper] Login complete", flush=True)
+
         cdp_url = browser.cdp_url
         if not cdp_url:
-            raise RuntimeError("Browser CDP URL is missing after browser start")
+            raise RuntimeError("Browser CDP URL is missing after login")
 
-        cdp_capture = CoreProfileCdpCapture(
+        cdp_capture = JuiceboxProfileCdpCapture(
             cdp_url=cdp_url,
             output_dir=capture_run_dir,
-            profile_match_substring=profile_match_substring,
+            profile_match_substring="/api/profile",
             on_profile_payload=emit_user_payload,
         )
         await cdp_capture.start()
-        print(
-            f"[Scraper] Using profile match substring: {profile_match_substring}",
-            flush=True,
-        )
         if capture_run_dir is not None:
             print(
-                f"[Scraper] CDP search capture enabled: {capture_run_dir}",
+                f"[Scraper] CDP profile capture enabled: {capture_run_dir}",
                 flush=True,
             )
         else:
@@ -302,32 +301,33 @@ async def main(core_url: str, profile_id: str, total_pages: int):
                 flush=True,
             )
 
-        await agent.run()
-        print("[Scraper] Login complete", flush=True)
-
+        sensitive_data: dict[str, str] = {
+            "x_user": email,
+            "x_pass": password,
+        }
         for current_page in range(1, total_pages + 1):
-            print(f"[Scraper] Monitoring page {current_page}/{total_pages}", flush=True)
+            print(f"[Scraper] Scraping page {current_page}/{total_pages}", flush=True)
+            scrape_agent = Agent(
+                task=scrape_prompt,
+                browser=browser,
+                llm=llm,
+                sensitive_data=sensitive_data,
+            )
+            await scrape_agent.run()
             if cdp_capture is not None:
                 cdp_capture.raise_if_failed()
-
-            monitor_wait_seconds = random.randint(
-                PAGE_MONITOR_WAIT_MIN_SECONDS, PAGE_MONITOR_WAIT_MAX_SECONDS
-            )
             print(
-                (
-                    "[Scraper] Waiting "
-                    f"{monitor_wait_seconds}s to capture responses on page {current_page}"
-                ),
+                f"[Scraper] Finished scraping page {current_page}/{total_pages}",
                 flush=True,
             )
-            await asyncio.sleep(monitor_wait_seconds)
 
-            if current_page >= total_pages:
-                continue
-
-            await click_next_page(cdp_url=cdp_url, current_page=current_page)
-            if cdp_capture is not None:
-                cdp_capture.raise_if_failed()
+            if current_page < total_pages:
+                await click_next_page(
+                    cdp_url=cdp_url,
+                    current_page=current_page,
+                )
+                if cdp_capture is not None:
+                    cdp_capture.raise_if_failed()
 
         if cdp_capture is not None:
             cdp_capture.raise_if_failed()
@@ -350,8 +350,8 @@ async def main(core_url: str, profile_id: str, total_pages: int):
                     (
                         "[Scraper] CDP capture stopped. "
                         f"apiRequests={cdp_capture.state.api_request_count} "
-                        f"searchMatches={cdp_capture.state.profile_match_count} "
-                        f"savedSearchResponses={cdp_capture.state.saved_profile_count} "
+                        f"profileMatches={cdp_capture.state.profile_match_count} "
+                        f"savedProfiles={cdp_capture.state.saved_profile_count} "
                         f"emittedCandidates={cdp_capture.state.emitted_candidate_count}"
                     ),
                     flush=True,

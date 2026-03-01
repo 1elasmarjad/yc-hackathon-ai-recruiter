@@ -32,13 +32,13 @@ def decode_response_body(result: JsonDict) -> str:
     return base64.b64decode(body).decode("utf-8")
 
 
-class CoreProfileCdpCapture:
+class JuiceboxProfileCdpCapture:
     def __init__(
         self,
         *,
         cdp_url: str,
         output_dir: Path | None = None,
-        profile_match_substring: str = "/api/search",
+        profile_match_substring: str = "/api/profile",
         on_profile_payload: ProfilePayloadCallback | None = None,
     ) -> None:
         self.cdp_url = cdp_url
@@ -101,7 +101,7 @@ class CoreProfileCdpCapture:
 
     def raise_if_failed(self) -> None:
         if self._task_error is not None:
-            raise RuntimeError("CDP search capture task failed") from self._task_error
+            raise RuntimeError("CDP profile capture task failed") from self._task_error
 
     async def _close_resources(self) -> None:
         if self._browser is not None:
@@ -126,10 +126,7 @@ class CoreProfileCdpCapture:
         if is_api_url:
             self.state.api_request_count += 1
 
-        # Match requested substring, with a broader fallback for search-related API routes.
-        should_capture = self.profile_match_substring in url or (
-            is_api_url and "search" in url.lower()
-        )
+        should_capture = self.profile_match_substring in url
         if should_capture:
             self.state.profile_match_count += 1
             self.state.pending_profile_requests[request_id] = url
@@ -164,23 +161,16 @@ class CoreProfileCdpCapture:
             return
 
         try:
-            parsed_json = json.loads(text)
+            parsed_json: Any = json.loads(text)
         except json.JSONDecodeError:
             return
 
-        if not isinstance(parsed_json, dict):
-            return
-
-        page_results = find_page_results(parsed_json)
-        if not isinstance(page_results, list):
-            return
         captured_at = datetime.now(timezone.utc)
+        profile_payloads = find_profile_payloads(parsed_json)
 
         if self._on_profile_payload is not None:
-            for candidate in page_results:
-                if not isinstance(candidate, dict):
-                    continue
-                callback_result = self._on_profile_payload(candidate)
+            for payload in profile_payloads:
+                callback_result = self._on_profile_payload(payload)
                 if isawaitable(callback_result):
                     await callback_result
                 self.state.emitted_candidate_count += 1
@@ -279,3 +269,55 @@ def find_page_results(payload: Any) -> list[Any] | None:
         return None
 
     return None
+
+
+PROFILE_WRAPPER_KEYS = (
+    "profile",
+    "candidate",
+    "person",
+    "contact",
+    "result",
+    "item",
+)
+
+
+def looks_like_candidate_dict(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    return any(key in payload for key in CANDIDATE_HINT_KEYS) or "id" in payload
+
+
+def find_profile_payloads(payload: Any) -> list[dict[str, Any]]:
+    if looks_like_candidate_dict(payload):
+        return [payload]
+
+    if isinstance(payload, dict):
+        for key in PROFILE_WRAPPER_KEYS:
+            nested_payload = payload.get(key)
+            if looks_like_candidate_dict(nested_payload):
+                return [nested_payload]
+
+        page_results = find_page_results(payload)
+        if isinstance(page_results, list):
+            return [item for item in page_results if isinstance(item, dict)]
+
+        for nested_value in payload.values():
+            nested_payloads = find_profile_payloads(nested_value)
+            if nested_payloads:
+                return nested_payloads
+
+        return []
+
+    if isinstance(payload, list):
+        if list_looks_like_candidates(payload):
+            return [item for item in payload if isinstance(item, dict)]
+        for item in payload:
+            nested_payloads = find_profile_payloads(item)
+            if nested_payloads:
+                return nested_payloads
+
+    return []
+
+
+# Backward compatibility for any existing imports.
+CoreProfileCdpCapture = JuiceboxProfileCdpCapture

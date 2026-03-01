@@ -21,7 +21,14 @@ export type CoreCrawlInput = {
   targetUrl: string;
   profileId: string;
   totalPages: number;
-  onUserPayload: (payload: CoreUserPayload) => void | Promise<void>;
+  onUserPayload: (
+    payload: CoreUserPayload,
+    rawPayload: unknown
+  ) => void | Promise<void>;
+  onInvalidUserPayload?: (
+    payload: unknown,
+    errorMessage: string
+  ) => void | Promise<void>;
   onBrowserUseUrl?: (browserUseUrl: string | null) => void | Promise<void>;
   onProfileCaptureDir?: (profileCaptureDir: string) => void | Promise<void>;
 };
@@ -37,6 +44,7 @@ export type CoreCrawlResult = {
   browserUseUrl: string | null;
   profileCaptureDir: string | null;
   payloadCount: number;
+  invalidPayloadCount: number;
   captureStats: CoreCaptureStats | null;
 };
 
@@ -55,6 +63,7 @@ export async function coreCrawl(input: CoreCrawlInput): Promise<CoreCrawlResult>
   let captureStats: CoreCaptureStats | null = null;
   let didEmitBrowserUseUrl = false;
   let payloadCount = 0;
+  let invalidPayloadCount = 0;
   let lineProcessingError: Error | null = null;
   const processingTasks = new Set<Promise<void>>();
   let childProcess: ReturnType<typeof spawn> | null = null;
@@ -168,9 +177,17 @@ export async function coreCrawl(input: CoreCrawlInput): Promise<CoreCrawlResult>
       );
     }
 
-    const parsedPayload = parseCoreUserPayload(parsedLinePayload);
-    await input.onUserPayload(parsedPayload);
-    payloadCount += 1;
+    try {
+      const parsedPayload = parseCoreUserPayload(parsedLinePayload);
+      await input.onUserPayload(parsedPayload, parsedLinePayload);
+      payloadCount += 1;
+    } catch (error: unknown) {
+      invalidPayloadCount += 1;
+      if (input.onInvalidUserPayload) {
+        const message = toError(error).message;
+        await input.onInvalidUserPayload(parsedLinePayload, message);
+      }
+    }
   }
 
   function onLineProcessingError(error: unknown): void {
@@ -260,6 +277,7 @@ export async function coreCrawl(input: CoreCrawlInput): Promise<CoreCrawlResult>
     browserUseUrl,
     profileCaptureDir,
     payloadCount,
+    invalidPayloadCount,
     captureStats,
   };
 }

@@ -1,4 +1,5 @@
 import { coreCrawl } from "@/lib/core/core-crawl";
+import type { CoreUserPayload } from "@/lib/core/user-payload";
 
 export const runtime = "nodejs";
 
@@ -7,15 +8,32 @@ type CoreCrawlRequestBody = {
   totalPages?: unknown;
 };
 
+type InvalidCorePayload = {
+  error: string;
+  payload: unknown;
+};
+
 type StreamEvent =
   | { type: "started" }
   | { type: "live_url"; browserUseUrl: string | null }
   | { type: "capture_dir"; profileCaptureDir: string }
-  | { type: "payload"; payload: unknown; payloadCount: number }
+  | {
+      type: "payload";
+      payload: CoreUserPayload;
+      rawPayload: unknown;
+      payloadCount: number;
+    }
+  | {
+      type: "invalid_payload";
+      error: string;
+      payload: unknown;
+      invalidPayloadCount: number;
+    }
   | {
       type: "done";
       browserUseUrl: string | null;
       payloadCount: number;
+      invalidPayloadCount: number;
       profileCaptureDir: string | null;
       captureStats: {
         apiRequests: number;
@@ -23,7 +41,9 @@ type StreamEvent =
         savedSearchResponses: number;
         emittedCandidates: number;
       } | null;
-      payloads: unknown[];
+      payloads: CoreUserPayload[];
+      rawPayloads: unknown[];
+      invalidPayloads: InvalidCorePayload[];
     }
   | { type: "error"; error: string };
 
@@ -84,7 +104,10 @@ export async function POST(request: Request): Promise<Response> {
       let browserUseUrl: string | null = null;
       let profileCaptureDir: string | null = null;
       let payloadCount = 0;
-      const payloads: unknown[] = [];
+      let invalidPayloadCount = 0;
+      const payloads: CoreUserPayload[] = [];
+      const rawPayloads: unknown[] = [];
+      const invalidPayloads: InvalidCorePayload[] = [];
 
       const send = (event: StreamEvent): void => {
         controller.enqueue(encoder.encode(toJsonLine(event)));
@@ -98,10 +121,22 @@ export async function POST(request: Request): Promise<Response> {
             targetUrl,
             profileId,
             totalPages,
-            onUserPayload: async (payload) => {
-              payloads.push(payload);
+            onUserPayload: async (payload, rawPayload) => {
               payloadCount += 1;
-              send({ type: "payload", payload, payloadCount });
+              payloads.push(payload);
+              rawPayloads.push(rawPayload);
+              send({ type: "payload", payload, rawPayload, payloadCount });
+            },
+            onInvalidUserPayload: async (payload, errorMessage) => {
+              invalidPayloadCount += 1;
+              rawPayloads.push(payload);
+              invalidPayloads.push({ error: errorMessage, payload });
+              send({
+                type: "invalid_payload",
+                error: errorMessage,
+                payload,
+                invalidPayloadCount,
+              });
             },
             onBrowserUseUrl: async (url) => {
               browserUseUrl = url;
@@ -117,9 +152,12 @@ export async function POST(request: Request): Promise<Response> {
             type: "done",
             browserUseUrl: browserUseUrl ?? result.browserUseUrl,
             payloadCount: result.payloadCount,
+            invalidPayloadCount: result.invalidPayloadCount,
             profileCaptureDir: profileCaptureDir ?? result.profileCaptureDir,
             captureStats: result.captureStats,
             payloads,
+            rawPayloads,
+            invalidPayloads,
           });
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error);
@@ -141,3 +179,4 @@ export async function POST(request: Request): Promise<Response> {
     },
   });
 }
+
