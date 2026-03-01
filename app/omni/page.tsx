@@ -17,12 +17,16 @@ const generateCells = (): GridCell[] => {
     const cells: GridCell[] = [];
 
     // A mix of agents to populate the surrounding tiles without any 'empty' slots
-    const agentTypes: AgentType[] = [
+    const baseAgentTypes: AgentType[] = [
         "linkedin", "github", "linkedin-posts", "devpost", "linkedin", "github",
         "github", "devpost", "linkedin-posts", "devpost", "linkedin", "github",
         "devpost", "linkedin-posts", "linkedin", "linkedin", "github", "linkedin-posts",
         "devpost", "github", "linkedin", "linkedin-posts", "devpost", "github"
     ];
+
+    // Randomize the placements
+    const agentTypes = baseAgentTypes.sort(() => Math.random() - 0.5);
+
 
     let agentIndex = 0;
 
@@ -117,7 +121,7 @@ export default function OmniViewPage() {
                 </h1>
                 <div className="flex items-center gap-4 text-xs font-mono">
                     <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> SYSTEM ONLINE</span>
-                    <span>ACTIVE NODES: 21/24</span>
+                    <span>ACTIVE SESSIONS: 21</span>
                 </div>
             </div>
 

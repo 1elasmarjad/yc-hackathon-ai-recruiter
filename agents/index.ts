@@ -4,6 +4,7 @@ import { Devpost_agent } from "./devpost/run";
 import type { GithubAgentInput } from "./github/schema";
 import { Github_agent } from "./github/run";
 import { Linkedin_posts_agent } from "./linkedin-posts/run";
+import type { LinkedinAgentInput } from "./linkedin/schema";
 import { Linkedin_agent } from "./linkedin/run";
 
 type DevpostAgent = {
