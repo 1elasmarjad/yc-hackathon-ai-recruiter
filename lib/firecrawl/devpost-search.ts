@@ -1,4 +1,4 @@
-import Firecrawl, { type Document, type SearchResultWeb } from "firecrawl";
+import Firecrawl, { type Document, type SearchResultWeb } from "@/lib/firecrawl/client";
 import { z } from "zod";
 import {
   DEVPOST_SEARCH_LIMIT,

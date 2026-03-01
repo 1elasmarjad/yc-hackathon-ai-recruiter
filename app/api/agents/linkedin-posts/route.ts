@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { BrowserUse } from "browser-use-sdk";
-import Firecrawl from "firecrawl";
+import Firecrawl from "@/lib/firecrawl/client";
 import {
   Linkedin_posts_agent,
   type LinkedinPostsAgentResult,

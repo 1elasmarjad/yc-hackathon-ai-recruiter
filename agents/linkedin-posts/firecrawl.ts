@@ -1,5 +1,5 @@
-import type Firecrawl from "firecrawl";
-import { type Document, type SearchResultWeb } from "firecrawl";
+import type Firecrawl from "@/lib/firecrawl/client";
+import { type Document, type SearchResultWeb } from "@/lib/firecrawl/client";
 
 export type FirecrawlSearchResultItem = {
   url: string;

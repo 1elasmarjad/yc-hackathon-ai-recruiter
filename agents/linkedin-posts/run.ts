@@ -1,5 +1,5 @@
 import { BrowserUse } from "browser-use-sdk";
-import Firecrawl from "firecrawl";
+import Firecrawl from "@/lib/firecrawl/client";
 import { toLinkedinPostsMarkdown } from "./markdown";
 import {
   buildLinkedinPostsTaskPrompt,
@@ -115,8 +115,17 @@ export const Linkedin_posts_agent: LinkedinPostsAgentRunner = async (
     throw new LinkedinProfileUsernameNotFoundError(parsedInput.linkedinProfileUrl);
   }
 
-  const firecrawlClient =
-    clients.firecrawlClient ?? new Firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY });
+  const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
+  let firecrawlClient = clients.firecrawlClient;
+
+  if (!firecrawlClient) {
+    if (!firecrawlApiKey) {
+      throw new Error("Missing FIRECRAWL_API_KEY in environment. Add it to your .env.local file.");
+    }
+
+    firecrawlClient = new Firecrawl({ apiKey: firecrawlApiKey });
+  }
+
   const browserUseClient = clients.browserUseClient ?? new BrowserUse();
 
   const query = `"${parsedInput.fullName}" site:linkedin.com/posts`;

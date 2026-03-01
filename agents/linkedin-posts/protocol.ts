@@ -1,5 +1,5 @@
 import type { BrowserUse } from "browser-use-sdk";
-import type Firecrawl from "firecrawl";
+import type Firecrawl from "@/lib/firecrawl/client";
 import type { LinkedinPostsAgentInput, LinkedinPostsAgentResult } from "./schema";
 
 export type LinkedinPostsAgentClients = {
