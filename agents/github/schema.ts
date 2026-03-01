@@ -15,6 +15,14 @@ export const GithubAgentInputSchema = z.object({
   maxSteps: z.number().int().positive().optional(),
 });
 
+const TopRepositorySchema = z.object({
+  name: z.string(),
+  url: z.url(),
+  files: z.array(z.string()).nullable(),
+  readmeSummary: z.string().nullable(),
+  agentsMd: z.string().nullable(),
+});
+
 export const GithubAgentStructuredOutputSchema = z.object({
   profileUrl: z.url(),
   displayName: z.string().nullable(),
@@ -26,6 +34,7 @@ export const GithubAgentStructuredOutputSchema = z.object({
   contributionSummary: z.string().nullable(),
   contributionPeriod: z.string().nullable(),
   pinnedRepositories: z.array(GithubRepositorySchema).max(6),
+  topRepositories: z.array(TopRepositorySchema).max(2).optional(),
 });
 
 export type GithubAgentInput = z.input<typeof GithubAgentInputSchema>;
