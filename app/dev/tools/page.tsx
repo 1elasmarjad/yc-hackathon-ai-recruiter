@@ -12,9 +12,9 @@ type AgentDefinition = {
 };
 
 type DevpostResponse = {
-  markdown: string;
+  markdown: string | null;
   liveUrl: string | null;
-  sessionId: string;
+  sessionId: string | null;
 };
 
 type BrowserUseSessionResponse = {
@@ -331,7 +331,7 @@ export default function DevToolsPage() {
 
       const json = (await response.json()) as Partial<DevpostResponse> & { error?: string };
 
-      if (!response.ok || !json.markdown) {
+      if (!response.ok) {
         const message = json.error ?? "Failed to run Devpost_agent.";
         setDevpostStatus("error");
         setDevpostError(message);
@@ -339,7 +339,7 @@ export default function DevToolsPage() {
       }
 
       setDevpostStatus("success");
-      setDevpostMarkdownOutput(json.markdown);
+      setDevpostMarkdownOutput(json.markdown ?? null);
       setDevpostLiveUrl(json.liveUrl ?? null);
       setDevpostResultSessionId(json.sessionId ?? null);
     } catch (error: unknown) {

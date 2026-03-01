@@ -13,13 +13,6 @@ const FullNameSchema = z.string().trim().min(1);
 
 type SearchWebResult = SearchResultWeb | Document;
 
-export class DevpostProfileNotFoundError extends Error {
-  constructor(fullName: string) {
-    super(`No valid Devpost user profile URL found for "${fullName}".`);
-    this.name = "DevpostProfileNotFoundError";
-  }
-}
-
 export function getFirecrawlEnv(): z.output<typeof FirecrawlEnvSchema> {
   const parsed = FirecrawlEnvSchema.safeParse(process.env);
 
@@ -66,13 +59,12 @@ function normalizeWebResults(results: SearchWebResult[] | undefined): string[] {
   return urls;
 }
 
-export async function findFirstDevpostProfileByName(fullName: string): Promise<string> {
+export async function findFirstDevpostProfileByName(fullName: string): Promise<string | null> {
   const normalizedFullName = FullNameSchema.parse(fullName);
   const firecrawl = new Firecrawl({ apiKey: getFirecrawlEnv().FIRECRAWL_API_KEY });
 
   const searchQuery = `${normalizedFullName} Devpost`;
   const searchResult = await firecrawl.search(searchQuery, {
-    sources: ["web"],
     limit: DEVPOST_SEARCH_LIMIT,
   });
 
@@ -87,5 +79,5 @@ export async function findFirstDevpostProfileByName(fullName: string): Promise<s
     return normalizedProfileUrl;
   }
 
-  throw new DevpostProfileNotFoundError(normalizedFullName);
+  return null;
 }

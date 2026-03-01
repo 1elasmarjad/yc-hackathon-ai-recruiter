@@ -6,13 +6,11 @@ const FirecrawlClientOptionsSchema = z.object({
 });
 
 const FirecrawlSearchOptionsSchema = z.object({
-  sources: z.array(z.literal("web")).optional(),
   limit: z.number().int().min(1).optional(),
 });
 
 const FirecrawlSearchInputSchema = z.object({
   query: z.string().trim().min(1),
-  sources: z.array(z.literal("web")).optional(),
   limit: z.number().int().min(1).optional(),
 });
 
@@ -89,7 +87,10 @@ export default class Firecrawl {
     });
 
     if (!response.ok) {
-      throw new Error(`Firecrawl search failed with status ${response.status}.`);
+      const errorBody = await response.text().catch(() => "");
+      throw new Error(
+        `Firecrawl search failed with status ${response.status}.${errorBody ? ` Response: ${errorBody}` : ""}`,
+      );
     }
 
     const json: unknown = await response.json();

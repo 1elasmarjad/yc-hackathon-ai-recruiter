@@ -53,7 +53,6 @@ export async function firecrawlSearch(
   input: { query: string; limit: number },
 ): Promise<FirecrawlSearchResult> {
   const searchResponse = await firecrawl.search(input.query, {
-    sources: ["web"],
     limit: input.limit,
   });
 

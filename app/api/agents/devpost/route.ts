@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import { BrowserUse } from "browser-use-sdk";
 import { z } from "zod";
 import { Devpost_agent } from "@/agents";
-import {
-  DevpostProfileNotFoundError,
-  findFirstDevpostProfileByName,
-} from "@/lib/firecrawl/devpost-search";
+import { findFirstDevpostProfileByName } from "@/lib/firecrawl/devpost-search";
 
 const DevpostAgentRequestSchema = z.object({
   fullName: z.string().trim().min(1),
@@ -53,6 +50,13 @@ export async function POST(request: Request) {
     }
 
     const profileUrl = await findFirstDevpostProfileByName(parsed.data.fullName);
+    if (!profileUrl) {
+      return NextResponse.json({
+        markdown: null,
+        liveUrl: null,
+        sessionId: null,
+      });
+    }
 
     const client = new BrowserUse({ apiKey: browserUseApiKey });
     const result = await Devpost_agent(
@@ -71,15 +75,6 @@ export async function POST(request: Request) {
       sessionId: result.sessionId,
     });
   } catch (error: unknown) {
-    if (error instanceof DevpostProfileNotFoundError) {
-      return NextResponse.json(
-        {
-          error: error.message,
-        },
-        { status: 404 },
-      );
-    }
-
     const message =
       error instanceof Error ? error.message : "Unknown error while running Devpost_agent.";
 

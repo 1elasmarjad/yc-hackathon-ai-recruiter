@@ -371,32 +371,36 @@ async function processCandidate(
   }
 
   if (input.candidate.fullName) {
-    executions.push(
-      executeBrowserUseAgentRun({
-        convex,
-        workflowId: input.workflowId,
-        candidateId: input.candidateId,
-        agentType: "devpost",
-        browserUseApiKey: input.browserUseApiKey,
-        runWithSession: async ({ client, sessionId }) => {
-          const profileUrl = await findFirstDevpostProfileByName(input.candidate.fullName!);
-          const result = await Devpost_agent(
-            {
-              fullName: input.candidate.fullName!,
-              profileUrl,
-              sessionId,
-            },
-            client,
-          );
+    const devpostProfileUrl = await findFirstDevpostProfileByName(input.candidate.fullName);
 
-          return {
-            result: result.markdown,
-            liveUrl: result.liveUrl,
-            targetUrl: profileUrl,
-          };
-        },
-      }),
-    );
+    if (devpostProfileUrl) {
+      executions.push(
+        executeBrowserUseAgentRun({
+          convex,
+          workflowId: input.workflowId,
+          candidateId: input.candidateId,
+          agentType: "devpost",
+          targetUrl: devpostProfileUrl,
+          browserUseApiKey: input.browserUseApiKey,
+          runWithSession: async ({ client, sessionId }) => {
+            const result = await Devpost_agent(
+              {
+                fullName: input.candidate.fullName!,
+                profileUrl: devpostProfileUrl,
+                sessionId,
+              },
+              client,
+            );
+
+            return {
+              result: result.markdown,
+              liveUrl: result.liveUrl,
+              targetUrl: devpostProfileUrl,
+            };
+          },
+        }),
+      );
+    }
   }
 
   if (executions.length === 0) {

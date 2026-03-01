@@ -260,9 +260,24 @@ function WorkflowsDashboard(): ReactElement {
           </form>
 
           {submissionError ? (
-            <p className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-              {submissionError}
-            </p>
+            <div className="mt-4 flex items-start gap-3 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="mt-0.5 h-5 w-5 shrink-0 text-red-400">
+                <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-200">Workflow failed to start</p>
+                <p className="mt-1 text-xs text-red-300/80">{submissionError}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSubmissionError(null)}
+                className="shrink-0 text-red-400 transition hover:text-red-200"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                </svg>
+              </button>
+            </div>
           ) : null}
         </section>
 
@@ -361,7 +376,12 @@ function WorkflowsDashboard(): ReactElement {
                     Pending: {candidateStatusSummary.pending} | Running: {candidateStatusSummary.running} | Completed: {candidateStatusSummary.completed} | Failed: {candidateStatusSummary.failed}
                   </p>
                   {selectedWorkflow.error ? (
-                    <p className="mt-2 text-red-300">Error: {selectedWorkflow.error}</p>
+                    <div className="mt-3 flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="mt-0.5 h-4 w-4 shrink-0 text-red-400">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+                      </svg>
+                      <p className="text-xs text-red-300">{selectedWorkflow.error}</p>
+                    </div>
                   ) : null}
                 </div>
               ) : null}
@@ -461,8 +481,17 @@ function WorkflowsDashboard(): ReactElement {
                           <td className="max-w-[260px] truncate px-2 py-2 text-xs text-slate-300">
                             {run.targetUrl ?? "-"}
                           </td>
-                          <td className="max-w-[280px] truncate px-2 py-2 text-xs text-red-300">
-                            {run.error ?? "-"}
+                          <td className="max-w-[320px] px-2 py-2 text-xs">
+                            {run.error ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-red-300" title={run.error}>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 shrink-0 text-red-400">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+                                </svg>
+                                <span className="truncate">{run.error}</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-500">-</span>
+                            )}
                           </td>
                         </tr>
                       ))}
