@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@mendable/firecrawl-js": "^4.15.0",
     "ai": "^6.0.105",
     "browser-use-sdk": "latest",
     "convex": "^1.32.0",

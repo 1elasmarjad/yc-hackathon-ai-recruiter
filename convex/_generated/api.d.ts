@@ -9,6 +9,7 @@
  */
 
 import type * as assessment from "../assessment.js";
+import type * as workflows from "../workflows.js";
 
 import type {
   ApiFromModules,
@@ -18,6 +19,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   assessment: typeof assessment;
+  workflows: typeof workflows;
 }>;
 
 /**
