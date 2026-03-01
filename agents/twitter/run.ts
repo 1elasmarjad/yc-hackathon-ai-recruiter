@@ -20,6 +20,9 @@ export const Twitter_agent: TwitterAgentRunner = async (
       systemPromptExtension: TWITTER_AGENT_SYSTEM_PROMPT,
       ...(parsedInput.sessionId ? { sessionId: parsedInput.sessionId } : {}),
       ...(parsedInput.maxSteps ? { maxSteps: parsedInput.maxSteps } : {}),
+      ...(process.env.TWITTER_PROFILE_ID && !parsedInput.sessionId
+        ? { sessionSettings: { profileId: process.env.TWITTER_PROFILE_ID } }
+        : {}),
     },
   );
 
