@@ -1,30 +1,30 @@
 import Firecrawl from "@/lib/firecrawl/client";
-import { z } from "zod";
 import {
-  DEVPOST_SEARCH_LIMIT,
-  normalizeDevpostUserProfileUrl,
-} from "@/agents/devpost/query";
+  GITHUB_SEARCH_LIMIT,
+  normalizeGithubProfileUrl,
+} from "@/agents/github/query";
+import { z } from "zod";
 import { getFirecrawlEnv } from "@/lib/firecrawl/env";
 import { normalizeSearchResultUrls } from "@/lib/firecrawl/search-results";
 
 const FullNameSchema = z.string().trim().min(1);
 
-export async function findFirstDevpostProfileByName(
+export async function findFirstGithubProfileByName(
   fullName: string,
   firecrawlClient?: Firecrawl,
 ): Promise<string | null> {
   const normalizedFullName = FullNameSchema.parse(fullName);
   const firecrawl = firecrawlClient ?? new Firecrawl({ apiKey: getFirecrawlEnv().FIRECRAWL_API_KEY });
 
-  const searchQuery = `${normalizedFullName} Devpost`;
+  const searchQuery = `${normalizedFullName} Github`;
   const searchResult = await firecrawl.search(searchQuery, {
-    limit: DEVPOST_SEARCH_LIMIT,
+    limit: GITHUB_SEARCH_LIMIT,
   });
 
   const candidateUrls = normalizeSearchResultUrls(searchResult.web);
 
   for (const candidateUrl of candidateUrls) {
-    const normalizedProfileUrl = normalizeDevpostUserProfileUrl(candidateUrl);
+    const normalizedProfileUrl = normalizeGithubProfileUrl(candidateUrl);
     if (!normalizedProfileUrl) {
       continue;
     }

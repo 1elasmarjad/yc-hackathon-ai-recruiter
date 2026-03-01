@@ -14,9 +14,12 @@ import type {
 
 type WorkflowDoc = Doc<"workflows">;
 type CandidateDoc = Doc<"candidates">;
+type AgentRunDoc = Doc<"agentRuns">;
 
 type WorkflowPipelineState = PipelineState & {
   workflow: WorkflowDoc | null;
+  candidateDocs: CandidateDoc[];
+  workflowAgentRuns: AgentRunDoc[];
   isLoading: boolean;
   invalidWorkflow: boolean;
   missingWorkflow: boolean;
@@ -145,9 +148,16 @@ function mapCandidate(candidate: CandidateDoc, criterionCatalog: string[]): Pipe
   const trimmedName = candidate.name?.trim() ?? null;
   const criteria = buildCandidateCriteria(candidate, criterionCatalog);
   const assessment = candidate.assessmentResult;
+  const totalCriteriaCount = assessment?.criteriaResults.length ?? 0;
+  const metCriteriaCount =
+    assessment?.criteriaResults.filter((entry) => entry.isFit).length ?? 0;
 
   const outcome: PipelineCandidate["outcome"] = assessment
-    ? assessment.isFit
+    ? totalCriteriaCount === 3 && metCriteriaCount === 3
+      ? "fit"
+      : totalCriteriaCount === 3 && metCriteriaCount === 2
+      ? "possible_fit"
+      : assessment.isFit
       ? "fit"
       : "rejected"
     : null;
@@ -161,8 +171,7 @@ function mapCandidate(candidate: CandidateDoc, criterionCatalog: string[]): Pipe
       return null;
     }
 
-    const metCount = assessment.criteriaResults.filter((entry) => entry.isFit).length;
-    return `${metCount}/${assessment.criteriaResults.length} criteria met`;
+    return `${metCriteriaCount}/${totalCriteriaCount} criteria met`;
   })();
 
   return {
@@ -247,14 +256,24 @@ export function useWorkflowPipelineState(workflowId: string): WorkflowPipelineSt
     api.workflows.listCandidatesByWorkflow,
     validatedWorkflowId ? { workflowId: validatedWorkflowId } : "skip",
   );
+  const workflowAgentRunsQuery = useQuery(
+    api.workflows.listWorkflowAgentRuns,
+    validatedWorkflowId ? { workflowId: validatedWorkflowId } : "skip",
+  );
 
   const isWorkflowDetailsLoading =
     validatedWorkflowId !== null &&
-    (workflowQuery === undefined || workflowCandidatesQuery === undefined);
+    (workflowQuery === undefined ||
+      workflowCandidatesQuery === undefined ||
+      workflowAgentRunsQuery === undefined);
 
   const isLoading = isWorkflowListLoading || isWorkflowDetailsLoading;
 
   const workflow = workflowQuery ?? null;
+  const workflowAgentRuns = useMemo(
+    () => workflowAgentRunsQuery ?? [],
+    [workflowAgentRunsQuery],
+  );
   const missingWorkflow =
     !isWorkflowListLoading && validatedWorkflowId !== null && workflowQuery === null;
 
@@ -321,6 +340,8 @@ export function useWorkflowPipelineState(workflowId: string): WorkflowPipelineSt
 
   return {
     workflow,
+    candidateDocs: sortedCandidates,
+    workflowAgentRuns,
     isLoading,
     invalidWorkflow,
     missingWorkflow,

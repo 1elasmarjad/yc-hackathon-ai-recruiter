@@ -8,7 +8,7 @@ import { LandingBG } from "../components/LandingBG";
 import { SearchBar } from "../components/SearchBar";
 
 const DEFAULT_URL =
-  "https://chat.juicebox.work/project/iJ3hlJYmNvzrk4rzJepd/search?search_id=DXA9j5FEYQ4pnxemyfqp";
+  "https://chat.juicebox.work/project/iJ3hlJYmNvzrk4rzJepd/search?search_id=5aP8TclaX7z7bm5qpEjd";
 const DEFAULT_TOTAL_PAGES = "1";
 
 export default function DemoPage() {

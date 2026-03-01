@@ -6,7 +6,7 @@ export type CriterionResult = {
 
 export type CandidateStatus = "pending" | "assessing" | "assessed" | "failed";
 
-export type AssessmentOutcome = "fit" | "rejected" | null; // null = not yet assessed
+export type AssessmentOutcome = "fit" | "possible_fit" | "rejected" | null; // null = not yet assessed
 
 export type PipelineCandidate = {
   id: string;

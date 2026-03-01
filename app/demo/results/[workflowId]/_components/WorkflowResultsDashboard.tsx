@@ -1,5 +1,8 @@
 "use client";
 
+import { useCallback } from "react";
+import { useRouter } from "next/navigation";
+import type { PipelineCandidate } from "@/app/landing-page/_components/shared/types";
 import { CommandCenter } from "@/app/landing-page/_components/variations/v1-command-center/CommandCenter";
 import { useWorkflowPipelineState } from "./use-workflow-pipeline-state";
 
@@ -27,10 +30,54 @@ function ErrorState({
 export function WorkflowResultsDashboard({
   workflowId,
 }: WorkflowResultsDashboardProps) {
+  const router = useRouter();
   const workflowState = useWorkflowPipelineState(workflowId);
+  const showFetchedDataButton = process.env.NODE_ENV !== "production";
   const isPipelineLoading =
     workflowState.workflow?.status === "running" &&
     workflowState.allCandidates.length === 0;
+
+  const handleOpenCandidateFetchedData = useCallback(
+    (candidate: PipelineCandidate): void => {
+      const rawCandidate = workflowState.candidateDocs.find(
+        (candidateDoc) => candidateDoc._id === candidate.id,
+      );
+
+      if (!rawCandidate) {
+        return;
+      }
+
+      const candidateRuns = workflowState.workflowAgentRuns
+        .filter((run) => run.candidateId === rawCandidate._id)
+        .sort((runA, runB) => runA.startedAt - runB.startedAt);
+
+      const payload = {
+        candidate: rawCandidate,
+        agentRuns: candidateRuns,
+        workflow: workflowState.workflow
+          ? {
+              id: workflowState.workflow._id,
+              name: workflowState.workflow.name,
+              aiCriteria: workflowState.workflow.aiCriteria ?? null,
+            }
+          : null,
+      };
+
+      const jsonBlob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const jsonBlobUrl = URL.createObjectURL(jsonBlob);
+      const openedWindow = window.open(jsonBlobUrl, "_blank", "noopener,noreferrer");
+
+      if (!openedWindow) {
+        URL.revokeObjectURL(jsonBlobUrl);
+        return;
+      }
+
+      window.setTimeout(() => URL.revokeObjectURL(jsonBlobUrl), 60_000);
+    },
+    [workflowState.candidateDocs, workflowState.workflow, workflowState.workflowAgentRuns],
+  );
 
   if (workflowState.isLoading) {
     return (
@@ -61,7 +108,13 @@ export function WorkflowResultsDashboard({
   return (
     <CommandCenter
       state={workflowState}
-      rightActionLabel={`Workflow: ${workflowState.workflow.status}`}
+      statusLabel={workflowState.workflow.status}
+      showCommandCenterButton
+      commandCenterButtonLabel="Command Center"
+      onCommandCenterClick={() => router.push(`/demo/results/${workflowId}/omni`)}
+      onOpenCandidateFetchedData={
+        showFetchedDataButton ? handleOpenCandidateFetchedData : undefined
+      }
       isLoading={isPipelineLoading}
     />
   );

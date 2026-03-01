@@ -15,6 +15,7 @@ import Firecrawl from "@/lib/firecrawl/client";
 import { coreCrawl } from "@/lib/core/core-crawl";
 import type { CoreUserPayload } from "@/lib/core/user-payload";
 import { findFirstDevpostProfileByName } from "@/lib/firecrawl/devpost-search";
+import { findFirstGithubProfileByName } from "@/lib/firecrawl/github-search";
 import type { WorkflowAgentType } from "@/lib/workflows/constants";
 
 type WorkflowId = Id<"workflows">;
@@ -355,20 +356,38 @@ async function processCandidate(
 
   const executions: Promise<AgentExecutionResult>[] = [];
 
-  if (input.candidate.githubUrl) {
+  let githubProfileUrl = input.candidate.githubUrl;
+
+  if (!githubProfileUrl && input.candidate.fullName) {
+    githubProfileUrl = await findFirstGithubProfileByName(
+      input.candidate.fullName,
+      input.firecrawlClient,
+    );
+
+    if (githubProfileUrl) {
+      await convex.mutation(api.workflows.upsertCandidate, {
+        workflowId: input.workflowId,
+        sourceCandidateId: input.candidate.sourceCandidateId,
+        name: input.candidate.name ?? undefined,
+        githubUrl: githubProfileUrl,
+      });
+    }
+  }
+
+  if (githubProfileUrl) {
     executions.push(
       executeBrowserUseAgentRun({
         convex,
         workflowId: input.workflowId,
         candidateId: input.candidateId,
         agentType: "github",
-        targetUrl: input.candidate.githubUrl,
+        targetUrl: githubProfileUrl,
         browserUseApiKey: input.browserUseApiKey,
         criteria: input.criteria,
         runWithSession: async ({ client, sessionId }) => {
           const markdown = await Github_agent(
             {
-              profileUrl: input.candidate.githubUrl!,
+              profileUrl: githubProfileUrl,
               sessionId,
             },
             client,
@@ -376,7 +395,7 @@ async function processCandidate(
 
           return {
             result: markdown,
-            targetUrl: input.candidate.githubUrl!,
+            targetUrl: githubProfileUrl,
           };
         },
       }),
@@ -450,7 +469,7 @@ async function processCandidate(
     const fullName = input.candidate.fullName;
 
     executions.push(
-      findFirstDevpostProfileByName(fullName).then(async (devpostProfileUrl) => {
+      findFirstDevpostProfileByName(fullName, input.firecrawlClient).then(async (devpostProfileUrl) => {
         if (!devpostProfileUrl) {
           return { agentType: "devpost" as const, success: true, error: null, resultMarkdown: null, criteriaResults: null };
         }
