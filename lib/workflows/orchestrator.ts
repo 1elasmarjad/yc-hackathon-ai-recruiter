@@ -176,6 +176,28 @@ function toNullableString(value: string | null | undefined): string | null {
   return toOptionalString(value) ?? null;
 }
 
+function normalizeHttpUrl(value: string | null | undefined): string | null {
+  const normalized = toOptionalString(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const withProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(normalized)
+    ? normalized
+    : `https://${normalized}`;
+
+  try {
+    const parsedUrl = new URL(withProtocol);
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      return null;
+    }
+
+    return parsedUrl.toString();
+  } catch {
+    return null;
+  }
+}
+
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
   if (!value || value.trim().length === 0) {
@@ -201,8 +223,8 @@ function buildCandidateSnapshot(payload: CoreUserPayload): CandidateSnapshot {
     sourceCandidateId: payload.id,
     name: toNullableString(normalizedName ?? null),
     fullName: toNullableString(derivedFullName || null),
-    linkedinUrl: toNullableString(payload.linkedin_url),
-    githubUrl: toNullableString(payload.github_url),
+    linkedinUrl: normalizeHttpUrl(payload.linkedin_url),
+    githubUrl: normalizeHttpUrl(payload.github_url),
   };
 }
 
