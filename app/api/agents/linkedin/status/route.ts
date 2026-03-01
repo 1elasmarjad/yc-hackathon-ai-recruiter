@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { BrowserUse } from "browser-use-sdk";
 import { z } from "zod";
-import { toLinkedinMarkdown } from "@/agents/linkedin/markdown";
-import { LinkedinAgentStructuredOutputSchema } from "@/agents/linkedin/schema";
 
 const LinkedinAgentStatusQuerySchema = z.object({
   taskId: z.string().min(1),
@@ -75,9 +73,16 @@ export async function GET(request: Request) {
       });
     }
 
-    const outputJson = JSON.parse(task.output) as unknown;
-    const structured = LinkedinAgentStructuredOutputSchema.parse(outputJson);
-    const markdown = toLinkedinMarkdown(structured);
+    if (typeof task.output !== "string" || task.output.trim() === "") {
+      return NextResponse.json({
+        status: "failed",
+        taskStatus: task.status,
+        taskId: task.id,
+        sessionId: task.sessionId,
+        liveUrl: session.liveUrl ?? null,
+        error: "Task finished without markdown output.",
+      });
+    }
 
     return NextResponse.json({
       status: "completed",
@@ -85,7 +90,7 @@ export async function GET(request: Request) {
       taskId: task.id,
       sessionId: task.sessionId,
       liveUrl: session.liveUrl ?? null,
-      markdown,
+      markdown: task.output,
     });
   } catch (error: unknown) {
     const message =

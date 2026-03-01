@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
 import { BrowserUse } from "browser-use-sdk";
-import { z } from "zod";
 import {
   buildLinkedinTaskPrompt,
   LINKEDIN_AGENT_SYSTEM_PROMPT,
 } from "@/agents/linkedin/prompt";
 import { LINKEDIN_ALLOWED_DOMAINS } from "@/agents/linkedin/query";
-import {
-  LinkedinAgentInputSchema,
-  LinkedinAgentStructuredOutputSchema,
-} from "@/agents/linkedin/schema";
+import { LinkedinAgentInputSchema } from "@/agents/linkedin/schema";
+import { buildLinkedinSessionSettings } from "@/agents/linkedin/session-settings";
 
 const LinkedinAgentStartRequestSchema = LinkedinAgentInputSchema;
 
@@ -43,17 +40,21 @@ export async function POST(request: Request) {
     }
 
     const client = new BrowserUse({ apiKey });
+    const sessionSettings = !parsed.data.sessionId
+      ? buildLinkedinSessionSettings({
+          profileId: process.env.LINKEDIN_PROFILE_ID,
+          proxyCountryCode: process.env.LINKEDIN_PROXY_COUNTRY_CODE,
+        })
+      : undefined;
+
     const task = await client.tasks.create({
       task: buildLinkedinTaskPrompt(parsed.data.profileUrl),
-      startUrl: parsed.data.profileUrl,
-      allowedDomains: [...LINKEDIN_ALLOWED_DOMAINS],
-      structuredOutput: JSON.stringify(z.toJSONSchema(LinkedinAgentStructuredOutputSchema)),
+      startUrl: "https://www.google.com",
+      allowedDomains: ["google.com", "www.google.com", ...LINKEDIN_ALLOWED_DOMAINS],
       systemPromptExtension: LINKEDIN_AGENT_SYSTEM_PROMPT,
       ...(parsed.data.sessionId ? { sessionId: parsed.data.sessionId } : {}),
       ...(parsed.data.maxSteps ? { maxSteps: parsed.data.maxSteps } : {}),
-      ...(process.env.LINKEDIN_PROFILE_ID && !parsed.data.sessionId
-        ? { sessionSettings: { profileId: process.env.LINKEDIN_PROFILE_ID } }
-        : {}),
+      ...(sessionSettings ? { sessionSettings } : {}),
     });
 
     const session = await client.sessions.get(task.sessionId);
