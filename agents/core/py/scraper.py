@@ -64,10 +64,14 @@ def resolve_browser_use_live_url(session_id: str) -> str | None:
             if error.code == 404 and attempt < BROWSER_USE_URL_MAX_ATTEMPTS:
                 time.sleep(BROWSER_USE_URL_RETRY_SECONDS)
                 continue
-            print(f"[Scraper] Failed to resolve Browser Use live URL: {error}", flush=True)
+            print(
+                f"[Scraper] Failed to resolve Browser Use live URL: {error}", flush=True
+            )
             return None
         except (urllib.error.URLError, json.JSONDecodeError) as error:
-            print(f"[Scraper] Failed to resolve Browser Use live URL: {error}", flush=True)
+            print(
+                f"[Scraper] Failed to resolve Browser Use live URL: {error}", flush=True
+            )
             return None
 
     return None
@@ -252,6 +256,7 @@ async def main(juicebox_url: str, profile_id: str, total_pages: int):
         task=get_login_prompt(juicebox_url),
         browser=browser,
         llm=llm,
+        flash_mode=True,
         sensitive_data={
             "x_user": email,
             "x_pass": password,
@@ -311,6 +316,7 @@ async def main(juicebox_url: str, profile_id: str, total_pages: int):
                 task=scrape_prompt,
                 browser=browser,
                 llm=llm,
+                flash_mode=True,
                 sensitive_data=sensitive_data,
             )
             await scrape_agent.run()

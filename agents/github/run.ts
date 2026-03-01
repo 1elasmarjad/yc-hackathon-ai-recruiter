@@ -18,6 +18,7 @@ export const Github_agent: GithubAgentRunner = async (
       allowedDomains: [...GITHUB_ALLOWED_DOMAINS],
       schema: GithubAgentStructuredOutputSchema,
       systemPromptExtension: GITHUB_AGENT_SYSTEM_PROMPT,
+      flashMode: true,
       ...(parsedInput.sessionId ? { sessionId: parsedInput.sessionId } : {}),
       ...(parsedInput.maxSteps ? { maxSteps: parsedInput.maxSteps } : {}),
     },

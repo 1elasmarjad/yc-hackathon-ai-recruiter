@@ -14,6 +14,7 @@ export const Linkedin_agent = async (
         {
             schema: LinkedinAgentStructuredOutputSchema,
             systemPromptExtension: LINKEDIN_AGENT_SYSTEM_PROMPT,
+            flashMode: true,
             ...(parsedInput.sessionId ? { sessionId: parsedInput.sessionId } : {}),
             ...(parsedInput.maxSteps ? { maxSteps: parsedInput.maxSteps } : {}),
         },
