@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { Phone, Check, Shield, Loader2 } from "lucide-react";
 import { usePipelineState } from "../../shared/use-pipeline-state";
 import type {
   PipelineCandidate,
@@ -7,9 +9,16 @@ import type {
   StatusFilter,
 } from "../../shared/types";
 
+type CallStatus = "idle" | "calling" | "called" | "error";
+
 type CommandCenterProps = {
   state?: PipelineState;
   rightActionLabel?: string;
+  statusLabel?: string;
+  showCommandCenterButton?: boolean;
+  commandCenterButtonLabel?: string;
+  onCommandCenterClick?: () => void;
+  onOpenCandidateFetchedData?: (candidate: PipelineCandidate) => void;
   isLoading?: boolean;
 };
 
@@ -66,6 +75,14 @@ function StatusBadge({
     );
   }
 
+  if (outcome === "possible_fit") {
+    return (
+      <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-sans text-amber-300">
+        POSSIBLE FIT
+      </span>
+    );
+  }
+
   if (outcome === "rejected") {
     return (
       <span className="rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-xs font-sans text-red-400">
@@ -91,7 +108,79 @@ function CriterionDot({ met }: { met: boolean | null }) {
   return <span className={`${base} ${met ? "bg-emerald-400" : "bg-red-400"}`} />;
 }
 
-function Sidebar({ candidate }: { candidate: PipelineCandidate }) {
+function SendCallButton({
+  candidate,
+  callStatus,
+  onSendCall,
+}: {
+  candidate: PipelineCandidate;
+  callStatus: CallStatus;
+  onSendCall: (candidateId: string) => void;
+}) {
+  const isAssessed = candidate.status === "assessed";
+  const isDisabled = !isAssessed || callStatus === "calling" || callStatus === "called";
+
+  if (callStatus === "called") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-400">
+        <Check className="h-3 w-3" />
+        Called
+      </span>
+    );
+  }
+
+  if (callStatus === "calling") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[10px] text-blue-300">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Calling
+      </span>
+    );
+  }
+
+  if (callStatus === "error") {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onSendCall(candidate.id);
+        }}
+        className="inline-flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] text-red-400 transition-colors hover:bg-red-500/20"
+      >
+        <Phone className="h-3 w-3" />
+        Retry
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={isDisabled}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSendCall(candidate.id);
+      }}
+      className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[10px] transition-colors ${
+        isDisabled
+          ? "cursor-not-allowed border-slate-700/30 bg-slate-800/30 text-slate-600"
+          : "border-blue-500/30 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20"
+      }`}
+    >
+      <Phone className="h-3 w-3" />
+      Call
+    </button>
+  );
+}
+
+function Sidebar({
+  candidate,
+  onOpenCandidateFetchedData,
+}: {
+  candidate: PipelineCandidate;
+  onOpenCandidateFetchedData?: (candidate: PipelineCandidate) => void;
+}) {
   const displayName = getDisplayName(candidate);
 
   const hasProfileMeta =
@@ -137,7 +226,7 @@ function Sidebar({ candidate }: { candidate: PipelineCandidate }) {
           <div className="mb-2 text-xs text-slate-500">{candidate.email}</div>
         ) : null}
 
-        {candidate.linkedinUrl || candidate.githubUrl ? (
+        {candidate.linkedinUrl || candidate.githubUrl || onOpenCandidateFetchedData ? (
           <div className="mb-3 flex flex-wrap gap-2">
             {candidate.linkedinUrl ? (
               <a
@@ -158,6 +247,15 @@ function Sidebar({ candidate }: { candidate: PipelineCandidate }) {
               >
                 GitHub
               </a>
+            ) : null}
+            {onOpenCandidateFetchedData ? (
+              <button
+                type="button"
+                onClick={() => onOpenCandidateFetchedData(candidate)}
+                className="rounded border border-slate-700 px-2 py-1 text-[10px] uppercase tracking-wide text-slate-300 hover:border-cyan-300 hover:text-cyan-200"
+              >
+                Fetched Data
+              </button>
             ) : null}
           </div>
         ) : null}
@@ -243,6 +341,11 @@ function EmptySidebar() {
 export function CommandCenter({
   state,
   rightActionLabel = "All seeing view",
+  statusLabel,
+  showCommandCenterButton = false,
+  commandCenterButtonLabel = "Command Center",
+  onCommandCenterClick,
+  onOpenCandidateFetchedData,
   isLoading = false,
 }: CommandCenterProps) {
   const internalState = usePipelineState();
@@ -257,6 +360,29 @@ export function CommandCenter({
     selectCandidate,
   } = resolvedState;
 
+  const [callStatuses, setCallStatuses] = useState<Record<string, CallStatus>>({});
+
+  async function handleSendCall(candidateId: string): Promise<void> {
+    setCallStatuses((prev) => ({ ...prev, [candidateId]: "calling" }));
+
+    try {
+      const response = await fetch("/api/vapi/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateId }),
+      });
+
+      if (!response.ok) {
+        setCallStatuses((prev) => ({ ...prev, [candidateId]: "error" }));
+        return;
+      }
+
+      setCallStatuses((prev) => ({ ...prev, [candidateId]: "called" }));
+    } catch {
+      setCallStatuses((prev) => ({ ...prev, [candidateId]: "error" }));
+    }
+  }
+
   const filters: { label: string; value: StatusFilter; count: number }[] = [
     { label: "FIT", value: "fit", count: stats.fit },
     { label: "ASSESSING", value: "assessing", count: stats.assessing },
@@ -265,6 +391,17 @@ export function CommandCenter({
     { label: "FAILED", value: "failed", count: stats.failed },
     { label: "ALL", value: "all", count: stats.total },
   ];
+  const hasResultsControls = statusLabel !== undefined || showCommandCenterButton;
+  const [isCommandCenterOpen, setIsCommandCenterOpen] = useState<boolean>(true);
+
+  function handleCommandCenterClick(): void {
+    if (onCommandCenterClick) {
+      onCommandCenterClick();
+      return;
+    }
+
+    setIsCommandCenterOpen((previous) => !previous);
+  }
 
   return (
     <div
@@ -291,95 +428,139 @@ export function CommandCenter({
               {filter.label} <span className="opacity-60">({filter.count})</span>
             </button>
           ))}
-          <button className="ml-auto rounded border border-blue-500/25 bg-blue-500/15 px-3 py-1.5 text-xs font-sans text-blue-300 transition-colors hover:bg-blue-500/25">
-            {rightActionLabel}
-          </button>
+          {hasResultsControls ? (
+            <div className="ml-auto flex items-center gap-2">
+              {statusLabel ? (
+                <span className="rounded border border-slate-600/60 bg-slate-700/50 px-3 py-1.5 text-xs font-sans uppercase tracking-wide text-slate-300">
+                  Workflow: {statusLabel}
+                </span>
+              ) : null}
+              {showCommandCenterButton ? (
+                <button
+                  type="button"
+                  onClick={handleCommandCenterClick}
+                  aria-pressed={isCommandCenterOpen}
+                  className="flex items-center gap-2 rounded border border-red-400/40 bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300/60"
+                >
+                  <Shield className="h-4 w-4" aria-hidden="true" />
+                  {commandCenterButtonLabel}
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <button className="ml-auto rounded border border-blue-500/25 bg-blue-500/15 px-3 py-1.5 text-xs font-sans text-blue-300 transition-colors hover:bg-blue-500/25">
+              {rightActionLabel}
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1">
-        <div className="w-1/2 overflow-y-auto border-r border-slate-700/50">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-[#0c1222]">
-              <tr className="border-b border-slate-800 text-[10px] font-sans uppercase tracking-wider text-slate-500">
-                <th className="w-8 px-4 py-2 text-left">#</th>
-                <th className="px-4 py-2 text-left">Candidate</th>
-                <th className="px-4 py-2 text-center">Criteria</th>
-                <th className="px-4 py-2 text-center">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center">
-                    <div className="inline-flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-200">
-                      <span className="h-2 w-2 animate-pulse rounded-full bg-blue-300" />
-                      Loading candidates...
-                    </div>
-                  </td>
+      {showCommandCenterButton && !isCommandCenterOpen ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center bg-[#0a0f1a] px-6">
+          <div className="rounded border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-sm text-slate-300">
+            Command Center hidden. Click the red button to open it.
+          </div>
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1">
+          <div className="w-1/2 overflow-y-auto border-r border-slate-700/50">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 z-10 bg-[#0c1222]">
+                <tr className="border-b border-slate-800 text-[10px] font-sans uppercase tracking-wider text-slate-500">
+                  <th className="w-8 px-4 py-2 text-left">#</th>
+                  <th className="px-4 py-2 text-left">Candidate</th>
+                  <th className="px-4 py-2 text-center">Criteria</th>
+                  <th className="px-4 py-2 text-center">Status</th>
+                  <th className="px-4 py-2 text-center">Call</th>
                 </tr>
-              ) : candidates.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-xs text-slate-500">
-                    No candidates for the selected filter.
-                  </td>
-                </tr>
-              ) : (
-                candidates.map((candidate, index) => (
-                  <tr
-                    key={candidate.id}
-                    onClick={() => selectCandidate(candidate.id)}
-                    className={`cursor-pointer border-b border-slate-800/30 transition-colors ${
-                      selectedCandidate?.id === candidate.id
-                        ? "border-l-2 border-l-blue-400 bg-blue-500/10"
-                        : "hover:bg-slate-800/20"
-                    }`}
-                  >
-                    <td className="px-4 py-2.5 text-xs font-sans text-slate-600">
-                      {String(index + 1).padStart(2, "0")}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-7 w-7 items-center justify-center rounded border border-slate-600/30 bg-slate-700/50 text-[10px] font-sans text-slate-400">
-                          {candidate.avatar ?? "--"}
-                        </div>
-                        <div className="min-w-0">
-                          <span className="block truncate font-medium text-slate-200">
-                            {getDisplayName(candidate)}
-                          </span>
-                          {candidate.sourceCandidateId ? (
-                            <span className="block truncate text-[10px] text-slate-500">
-                              {candidate.sourceCandidateId}
-                            </span>
-                          ) : null}
-                        </div>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center">
+                      <div className="inline-flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-200">
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-blue-300" />
+                        Loading candidates...
                       </div>
                     </td>
-                    <td className="px-4 py-2.5">
-                      {candidate.criteria.length > 0 ? (
-                        <div className="flex items-center justify-center gap-1.5">
-                          {candidate.criteria.map((criterion, criterionIndex) => (
-                            <CriterionDot key={criterionIndex} met={criterion.met} />
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center text-[10px] text-slate-600">-</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <StatusBadge status={candidate.status} outcome={candidate.outcome} />
+                  </tr>
+                ) : candidates.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-6 text-center text-xs text-slate-500">
+                      No candidates for the selected filter.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  candidates.map((candidate, index) => (
+                    <tr
+                      key={candidate.id}
+                      onClick={() => selectCandidate(candidate.id)}
+                      className={`cursor-pointer border-b border-slate-800/30 transition-colors ${
+                        selectedCandidate?.id === candidate.id
+                          ? "border-l-2 border-l-blue-400 bg-blue-500/10"
+                          : "hover:bg-slate-800/20"
+                      }`}
+                    >
+                      <td className="px-4 py-2.5 text-xs font-sans text-slate-600">
+                        {String(index + 1).padStart(2, "0")}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-7 w-7 items-center justify-center rounded border border-slate-600/30 bg-slate-700/50 text-[10px] font-sans text-slate-400">
+                            {candidate.avatar ?? "--"}
+                          </div>
+                          <div className="min-w-0">
+                            <span className="block truncate font-medium text-slate-200">
+                              {getDisplayName(candidate)}
+                            </span>
+                            {candidate.sourceCandidateId ? (
+                              <span className="block truncate text-[10px] text-slate-500">
+                                {candidate.sourceCandidateId}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {candidate.criteria.length > 0 ? (
+                          <div className="flex items-center justify-center gap-1.5">
+                            {candidate.criteria.map((criterion, criterionIndex) => (
+                              <CriterionDot key={criterionIndex} met={criterion.met} />
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center text-[10px] text-slate-600">-</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        <StatusBadge status={candidate.status} outcome={candidate.outcome} />
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        <SendCallButton
+                          candidate={candidate}
+                          callStatus={callStatuses[candidate.id] ?? "idle"}
+                          onSendCall={handleSendCall}
+                        />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-        <div className="w-1/2 bg-[#0a0f1a]">
-          {selectedCandidate ? <Sidebar candidate={selectedCandidate} /> : <EmptySidebar />}
+          <div className="w-1/2 bg-[#0a0f1a]">
+            {selectedCandidate ? (
+              <Sidebar
+                candidate={selectedCandidate}
+                onOpenCandidateFetchedData={onOpenCandidateFetchedData}
+              />
+            ) : (
+              <EmptySidebar />
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ import Firecrawl from "@/lib/firecrawl/client";
 import { coreCrawl } from "@/lib/core/core-crawl";
 import type { CoreUserPayload } from "@/lib/core/user-payload";
 import { findFirstDevpostProfileByName } from "@/lib/firecrawl/devpost-search";
+import { findFirstGithubProfileByName } from "@/lib/firecrawl/github-search";
 import type { WorkflowAgentType } from "@/lib/workflows/constants";
 
 type WorkflowId = Id<"workflows">;
@@ -217,6 +218,35 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
+/**
+ * Known name corrections keyed by LinkedIn username (the segment after /in/).
+ * Juicebox sometimes returns incorrect names — this map overrides them.
+ */
+const NAME_OVERRIDES_BY_LINKEDIN_USERNAME: Record<string, string> = {
+  jadelasmar: "Jad El Asmar",
+};
+
+function applyNameOverride(
+  linkedinUrl: string | null | undefined,
+  derivedName: string | undefined,
+): string | undefined {
+  if (!linkedinUrl) return derivedName;
+
+  try {
+    const pathname = new URL(linkedinUrl).pathname;
+    const segments = pathname.split("/").filter(Boolean);
+    if (segments[0]?.toLowerCase() === "in" && segments[1]) {
+      const username = decodeURIComponent(segments[1]).toLowerCase();
+      const override = NAME_OVERRIDES_BY_LINKEDIN_USERNAME[username];
+      if (override) return override;
+    }
+  } catch {
+    // invalid URL — fall through
+  }
+
+  return derivedName;
+}
+
 function buildCandidateSnapshot(payload: CoreUserPayload): CandidateSnapshot {
   const normalizedName = toOptionalString(payload.full_name);
   const firstName = toOptionalString(payload.first_name);
@@ -229,11 +259,14 @@ function buildCandidateSnapshot(payload: CoreUserPayload): CandidateSnapshot {
       .join(" ")
       .trim();
 
+  const linkedinUrl = normalizeHttpUrl(payload.linkedin_url);
+  const correctedName = applyNameOverride(linkedinUrl, derivedFullName || undefined);
+
   return {
     sourceCandidateId: payload.id,
-    name: toNullableString(normalizedName ?? null),
-    fullName: toNullableString(derivedFullName || null),
-    linkedinUrl: normalizeHttpUrl(payload.linkedin_url),
+    name: toNullableString(correctedName ?? normalizedName ?? null),
+    fullName: toNullableString(correctedName || null),
+    linkedinUrl,
     githubUrl: normalizeHttpUrl(payload.github_url),
   };
 }
@@ -355,20 +388,38 @@ async function processCandidate(
 
   const executions: Promise<AgentExecutionResult>[] = [];
 
-  if (input.candidate.githubUrl) {
+  let githubProfileUrl = input.candidate.githubUrl;
+
+  if (!githubProfileUrl && input.candidate.fullName) {
+    githubProfileUrl = await findFirstGithubProfileByName(
+      input.candidate.fullName,
+      input.firecrawlClient,
+    );
+
+    if (githubProfileUrl) {
+      await convex.mutation(api.workflows.upsertCandidate, {
+        workflowId: input.workflowId,
+        sourceCandidateId: input.candidate.sourceCandidateId,
+        name: input.candidate.name ?? undefined,
+        githubUrl: githubProfileUrl,
+      });
+    }
+  }
+
+  if (githubProfileUrl) {
     executions.push(
       executeBrowserUseAgentRun({
         convex,
         workflowId: input.workflowId,
         candidateId: input.candidateId,
         agentType: "github",
-        targetUrl: input.candidate.githubUrl,
+        targetUrl: githubProfileUrl,
         browserUseApiKey: input.browserUseApiKey,
         criteria: input.criteria,
         runWithSession: async ({ client, sessionId }) => {
           const markdown = await Github_agent(
             {
-              profileUrl: input.candidate.githubUrl!,
+              profileUrl: githubProfileUrl,
               sessionId,
             },
             client,
@@ -376,7 +427,7 @@ async function processCandidate(
 
           return {
             result: markdown,
-            targetUrl: input.candidate.githubUrl!,
+            targetUrl: githubProfileUrl,
           };
         },
       }),
@@ -450,7 +501,7 @@ async function processCandidate(
     const fullName = input.candidate.fullName;
 
     executions.push(
-      findFirstDevpostProfileByName(fullName).then(async (devpostProfileUrl) => {
+      findFirstDevpostProfileByName(fullName, input.firecrawlClient).then(async (devpostProfileUrl) => {
         if (!devpostProfileUrl) {
           return { agentType: "devpost" as const, success: true, error: null, resultMarkdown: null, criteriaResults: null };
         }

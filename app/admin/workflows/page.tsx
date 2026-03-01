@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   FormEvent,
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -114,6 +115,16 @@ function WorkflowsDashboard(): ReactElement {
     [selectedWorkflowRunHistoryQuery],
   );
 
+  const selectedWorkflowAllRunsQuery = useQuery(
+    api.workflows.listWorkflowAgentRuns,
+    selectedWorkflowId ? { workflowId: selectedWorkflowId } : "skip",
+  );
+
+  const selectedWorkflowAllRuns = useMemo(
+    () => selectedWorkflowAllRunsQuery ?? [],
+    [selectedWorkflowAllRunsQuery],
+  );
+
   const candidateStatusSummary = useMemo(
     () => ({
       pending: selectedWorkflowCandidates.filter((candidate) => candidate.status === "pending")
@@ -127,6 +138,40 @@ function WorkflowsDashboard(): ReactElement {
         .length,
     }),
     [selectedWorkflowCandidates],
+  );
+
+  const openCandidateFetchedData = useCallback(
+    (candidate: (typeof selectedWorkflowCandidates)[number]): void => {
+      const candidateRuns = selectedWorkflowAllRuns
+        .filter((run) => run.candidateId === candidate._id)
+        .sort((runA, runB) => runA.startedAt - runB.startedAt);
+
+      const payload = {
+        candidate,
+        agentRuns: candidateRuns,
+        workflow: selectedWorkflow
+          ? {
+              id: selectedWorkflow._id,
+              name: selectedWorkflow.name,
+              aiCriteria: selectedWorkflow.aiCriteria ?? null,
+            }
+          : null,
+      };
+
+      const jsonBlob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const jsonBlobUrl = URL.createObjectURL(jsonBlob);
+      const openedWindow = window.open(jsonBlobUrl, "_blank", "noopener,noreferrer");
+
+      if (!openedWindow) {
+        URL.revokeObjectURL(jsonBlobUrl);
+        return;
+      }
+
+      window.setTimeout(() => URL.revokeObjectURL(jsonBlobUrl), 60_000);
+    },
+    [selectedWorkflow, selectedWorkflowAllRuns],
   );
 
   async function handleStartWorkflow(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -436,6 +481,13 @@ function WorkflowsDashboard(): ReactElement {
                             <span className="text-xs text-slate-400">
                               {metCount}/{assessment.criteriaResults.length} criteria met
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => openCandidateFetchedData(candidate)}
+                              className="ml-auto rounded-md border border-slate-700 px-2 py-1 text-[11px] font-semibold text-slate-300 transition hover:border-cyan-300 hover:text-cyan-200"
+                            >
+                              Open fetched data
+                            </button>
                           </div>
 
                           <div className="mt-3 divide-y divide-slate-800 rounded-lg border border-slate-800">
