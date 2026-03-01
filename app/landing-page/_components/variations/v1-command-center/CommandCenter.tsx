@@ -10,6 +10,7 @@ import type {
 type CommandCenterProps = {
   state?: PipelineState;
   rightActionLabel?: string;
+  isLoading?: boolean;
 };
 
 function getDisplayName(candidate: PipelineCandidate): string {
@@ -242,6 +243,7 @@ function EmptySidebar() {
 export function CommandCenter({
   state,
   rightActionLabel = "All seeing view",
+  isLoading = false,
 }: CommandCenterProps) {
   const internalState = usePipelineState();
   const resolvedState = state ?? internalState;
@@ -307,7 +309,16 @@ export function CommandCenter({
               </tr>
             </thead>
             <tbody>
-              {candidates.length === 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center">
+                    <div className="inline-flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-200">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-blue-300" />
+                      Loading candidates...
+                    </div>
+                  </td>
+                </tr>
+              ) : candidates.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-6 text-center text-xs text-slate-500">
                     No candidates for the selected filter.

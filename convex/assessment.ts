@@ -182,3 +182,20 @@ export const assessCandidateFit = action({
     return { isFit, criteriaResults };
   },
 });
+
+export const assessAgentMarkdown = action({
+  args: {
+    criteria: v.array(v.string()),
+    agentMarkdown: v.string(),
+  },
+  handler: async (_ctx, args): Promise<CriterionResult[]> => {
+    const gateway = createAIGateway();
+
+    return await Promise.all(
+      args.criteria.map(async (criterion) => {
+        const result = await assessSingleCriterion(gateway, criterion, [args.agentMarkdown]);
+        return { criterion, ...result };
+      }),
+    );
+  },
+});

@@ -28,6 +28,9 @@ export function WorkflowResultsDashboard({
   workflowId,
 }: WorkflowResultsDashboardProps) {
   const workflowState = useWorkflowPipelineState(workflowId);
+  const isPipelineLoading =
+    workflowState.workflow?.status === "running" &&
+    workflowState.allCandidates.length === 0;
 
   if (workflowState.isLoading) {
     return (
@@ -59,6 +62,7 @@ export function WorkflowResultsDashboard({
     <CommandCenter
       state={workflowState}
       rightActionLabel={`Workflow: ${workflowState.workflow.status}`}
+      isLoading={isPipelineLoading}
     />
   );
 }

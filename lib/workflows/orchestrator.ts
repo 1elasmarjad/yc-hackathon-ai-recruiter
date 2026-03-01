@@ -38,11 +38,18 @@ type RunWorkflowPipelineInput = {
   aiCriteria?: string;
 };
 
+type AgentCriterionResult = {
+  criterion: string;
+  isFit: boolean;
+  evidence: string[];
+};
+
 type AgentExecutionResult = {
   agentType: WorkflowAgentType;
   success: boolean;
   error: string | null;
   resultMarkdown: string | null;
+  criteriaResults: AgentCriterionResult[] | null;
 };
 
 type BrowserUseRunContext = {
@@ -63,6 +70,7 @@ type ExecuteBrowserUseAgentRunInput = {
   agentType: Exclude<WorkflowAgentType, "juicebox">;
   targetUrl?: string;
   browserUseApiKey: string;
+  criteria?: string[];
   runWithSession: (context: BrowserUseRunContext) => Promise<BrowserUseRunOutput>;
 };
 
@@ -265,11 +273,21 @@ async function executeBrowserUseAgentRun(
       targetUrl: result.targetUrl ?? input.targetUrl,
     });
 
+    let criteriaResults: AgentCriterionResult[] | null = null;
+
+    if (input.criteria && input.criteria.length > 0 && result.result.trim().length > 0) {
+      criteriaResults = await input.convex.action(api.assessment.assessAgentMarkdown, {
+        criteria: input.criteria,
+        agentMarkdown: result.result,
+      });
+    }
+
     return {
       agentType: input.agentType,
       success: true,
       error: null,
       resultMarkdown: result.result,
+      criteriaResults,
     };
   } catch (error: unknown) {
     const message = toErrorMessage(error);
@@ -287,8 +305,36 @@ async function executeBrowserUseAgentRun(
       success: false,
       error: message,
       resultMarkdown: null,
+      criteriaResults: null,
     };
   }
+}
+
+function mergeCriteriaResults(
+  allAgentResults: AgentCriterionResult[][],
+  criteria: string[],
+): AgentCriterionResult[] {
+  const byCriterion = new Map<string, AgentCriterionResult>();
+
+  for (const criterion of criteria) {
+    byCriterion.set(criterion, { criterion, isFit: false, evidence: [] });
+  }
+
+  for (const agentResults of allAgentResults) {
+    for (const result of agentResults) {
+      const existing = byCriterion.get(result.criterion);
+      if (!existing) {
+        continue;
+      }
+
+      if (result.isFit) {
+        existing.isFit = true;
+        existing.evidence.push(...result.evidence);
+      }
+    }
+  }
+
+  return criteria.map((criterion) => byCriterion.get(criterion)!);
 }
 
 async function processCandidate(
@@ -299,7 +345,7 @@ async function processCandidate(
     candidate: CandidateSnapshot;
     browserUseApiKey: string;
     firecrawlClient: Firecrawl;
-    aiCriteria?: string;
+    criteria?: string[];
   },
 ): Promise<void> {
   await convex.mutation(api.workflows.setCandidateStatus, {
@@ -318,6 +364,7 @@ async function processCandidate(
         agentType: "github",
         targetUrl: input.candidate.githubUrl,
         browserUseApiKey: input.browserUseApiKey,
+        criteria: input.criteria,
         runWithSession: async ({ client, sessionId }) => {
           const markdown = await Github_agent(
             {
@@ -345,6 +392,7 @@ async function processCandidate(
         agentType: "linkedin",
         targetUrl: input.candidate.linkedinUrl,
         browserUseApiKey: input.browserUseApiKey,
+        criteria: input.criteria,
         runWithSession: async ({ client, sessionId }) => {
           const markdown = await Linkedin_agent(
             {
@@ -370,6 +418,7 @@ async function processCandidate(
         agentType: "linkedin_posts",
         targetUrl: input.candidate.linkedinUrl,
         browserUseApiKey: input.browserUseApiKey,
+        criteria: input.criteria,
         runWithSession: async ({ client, sessionId }) => {
           if (!input.candidate.fullName) {
             throw new Error("Cannot run linkedin_posts agent without candidate full name.");
@@ -398,21 +447,26 @@ async function processCandidate(
   }
 
   if (input.candidate.fullName) {
-    const devpostProfileUrl = await findFirstDevpostProfileByName(input.candidate.fullName);
+    const fullName = input.candidate.fullName;
 
-    if (devpostProfileUrl) {
-      executions.push(
-        executeBrowserUseAgentRun({
+    executions.push(
+      findFirstDevpostProfileByName(fullName).then(async (devpostProfileUrl) => {
+        if (!devpostProfileUrl) {
+          return { agentType: "devpost" as const, success: true, error: null, resultMarkdown: null, criteriaResults: null };
+        }
+
+        return executeBrowserUseAgentRun({
           convex,
           workflowId: input.workflowId,
           candidateId: input.candidateId,
           agentType: "devpost",
           targetUrl: devpostProfileUrl,
           browserUseApiKey: input.browserUseApiKey,
+          criteria: input.criteria,
           runWithSession: async ({ client, sessionId }) => {
             const result = await Devpost_agent(
               {
-                fullName: input.candidate.fullName!,
+                fullName,
                 profileUrl: devpostProfileUrl,
                 sessionId,
               },
@@ -425,9 +479,9 @@ async function processCandidate(
               targetUrl: devpostProfileUrl,
             };
           },
-        }),
-      );
-    }
+        });
+      }),
+    );
   }
 
   if (executions.length === 0) {
@@ -455,20 +509,20 @@ async function processCandidate(
     return;
   }
 
-  if (input.aiCriteria) {
-    const successfulMarkdowns = results
-      .filter((r) => r.success && r.resultMarkdown)
-      .map((r) => r.resultMarkdown!);
+  if (input.criteria && input.criteria.length > 0) {
+    const allAgentCriteriaResults = results
+      .filter((r): r is AgentExecutionResult & { criteriaResults: AgentCriterionResult[] } =>
+        r.success && r.criteriaResults !== null && r.criteriaResults.length > 0,
+      )
+      .map((r) => r.criteriaResults);
 
-    if (successfulMarkdowns.length > 0) {
-      const assessment = await convex.action(api.assessment.assessCandidateFit, {
-        aiCriteria: input.aiCriteria,
-        candidateMarkdown: successfulMarkdowns,
-      });
+    if (allAgentCriteriaResults.length > 0) {
+      const merged = mergeCriteriaResults(allAgentCriteriaResults, input.criteria);
+      const isFit = merged.every((r) => r.isFit);
 
       await convex.mutation(api.workflows.setCandidateAssessment, {
         candidateId: input.candidateId,
-        assessment,
+        assessment: { isFit, criteriaResults: merged },
       });
     }
   }
@@ -485,6 +539,14 @@ export async function runWorkflowPipeline(input: RunWorkflowPipelineInput): Prom
   const browserUseApiKey = getRequiredEnv("BROWSER_USE_API_KEY");
   const firecrawlApiKey = getRequiredEnv("FIRECRAWL_API_KEY");
   const firecrawlClient = new Firecrawl({ apiKey: firecrawlApiKey });
+
+  let criteria: string[] | undefined;
+
+  if (input.aiCriteria) {
+    criteria = await convex.action(api.assessment.splitCriteria, {
+      aiCriteria: input.aiCriteria,
+    });
+  }
 
   const seenCandidateIds = new Set<string>();
   const candidateQueue = new StreamingTaskQueue(input.candidateConcurrency);
@@ -528,7 +590,7 @@ export async function runWorkflowPipeline(input: RunWorkflowPipelineInput): Prom
               candidate,
               browserUseApiKey,
               firecrawlClient,
-              aiCriteria: input.aiCriteria,
+              criteria,
             });
           } catch (error: unknown) {
             await convex.mutation(api.workflows.setCandidateStatus, {
