@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 
 type RunStatus = "idle" | "running" | "success" | "error";
-type AgentId = "devpost" | "linkedin" | "linkedin-posts" | "github" | "twitter";
+type AgentId = "devpost" | "linkedin-posts" | "github" | "twitter" | "linkedin";
 
 type AgentDefinition = {
   id: AgentId;
@@ -48,11 +48,6 @@ const AGENT_DEFINITIONS: AgentDefinition[] = [
     subtitle: "Wins and built projects summary",
   },
   {
-    id: "linkedin",
-    title: "LinkedIn Agent",
-    subtitle: "Profile posts, experience, and projects",
-  },
-  {
     id: "linkedin-posts",
     title: "LinkedIn Posts Agent",
     subtitle: "Search, verify, and summarize user posts",
@@ -66,6 +61,11 @@ const AGENT_DEFINITIONS: AgentDefinition[] = [
     id: "twitter",
     title: "Twitter/X Agent",
     subtitle: "Top posts, replies, and interactions",
+  },
+  {
+    id: "linkedin",
+    title: "LinkedIn Agent",
+    subtitle: "Profile summary, projects, and interests",
   },
 ];
 
@@ -109,20 +109,6 @@ const downloadMarkdown = (markdown: string, fileName: string) => {
   URL.revokeObjectURL(url);
 };
 
-const buildLinkedinFileName = (profileUrl: string | null): string => {
-  if (!profileUrl) {
-    return "linkedin-output.md";
-  }
-
-  const username = profileUrl.split("/in/")[1]?.split("/")[0];
-
-  if (!username || username.trim() === "") {
-    return "linkedin-output.md";
-  }
-
-  return `${username}-linkedin.md`;
-};
-
 const buildLinkedinPostsFileName = (profileUrl: string | null): string => {
   if (!profileUrl) {
     return "linkedin-posts-output.md";
@@ -151,6 +137,20 @@ const buildGithubFileName = (profileUrl: string | null): string => {
   }
 
   return `${username}-github.md`;
+};
+
+const buildLinkedinFileName = (profileUrl: string | null): string => {
+  if (!profileUrl) {
+    return "linkedin-output.md";
+  }
+
+  const username = profileUrl.split("/in/")[1]?.split("/")[0];
+
+  if (!username || username.trim() === "") {
+    return "linkedin-output.md";
+  }
+
+  return `${username}-linkedin.md`;
 };
 
 const parseTwitterProfileUrls = (profileUrlsInput: string | null): string[] => {
@@ -209,13 +209,6 @@ export default function DevToolsPage() {
   const [devpostLiveUrl, setDevpostLiveUrl] = useState<string | null>(null);
   const [devpostResultSessionId, setDevpostResultSessionId] = useState<string | null>(null);
 
-  const [linkedinProfileUrl, setLinkedinProfileUrl] = useState<string | null>("");
-  const [linkedinSessionId, setLinkedinSessionId] = useState<string | null>("");
-  const [linkedinMaxSteps, setLinkedinMaxSteps] = useState<string | null>("80");
-  const [linkedinStatus, setLinkedinStatus] = useState<RunStatus>("idle");
-  const [linkedinError, setLinkedinError] = useState<string | null>(null);
-  const [linkedinMarkdownOutput, setLinkedinMarkdownOutput] = useState<string | null>(null);
-
   const [linkedinPostsFullName, setLinkedinPostsFullName] = useState<string | null>("");
   const [linkedinPostsProfileUrl, setLinkedinPostsProfileUrl] = useState<string | null>("");
   const [linkedinPostsSessionId, setLinkedinPostsSessionId] = useState<string | null>("");
@@ -247,27 +240,36 @@ export default function DevToolsPage() {
   const [twitterError, setTwitterError] = useState<string | null>(null);
   const [twitterMarkdownOutput, setTwitterMarkdownOutput] = useState<string | null>(null);
 
+  const [linkedinProfileUrl, setLinkedinProfileUrl] = useState<string | null>("");
+  const [linkedinSessionId, setLinkedinSessionId] = useState<string | null>("");
+  const [linkedinMaxSteps, setLinkedinMaxSteps] = useState<string | null>("80");
+  const [linkedinStatus, setLinkedinStatus] = useState<RunStatus>("idle");
+  const [linkedinError, setLinkedinError] = useState<string | null>(null);
+  const [linkedinMarkdownOutput, setLinkedinMarkdownOutput] = useState<string | null>(null);
+  const [linkedinLiveUrl, setLinkedinLiveUrl] = useState<string | null>(null);
+  const [linkedinRunSessionId, setLinkedinRunSessionId] = useState<string | null>(null);
+
   const devpostIsRunning = devpostStatus === "running";
-  const linkedinIsRunning = linkedinStatus === "running";
   const linkedinPostsIsRunning = linkedinPostsStatus === "running";
   const githubIsRunning = githubStatus === "running";
   const twitterIsRunning = twitterStatus === "running";
+  const linkedinIsRunning = linkedinStatus === "running";
   const devpostHasOutput = Boolean(devpostMarkdownOutput && devpostMarkdownOutput.trim() !== "");
-  const linkedinHasOutput = Boolean(linkedinMarkdownOutput && linkedinMarkdownOutput.trim() !== "");
   const linkedinPostsHasOutput = Boolean(
     linkedinPostsOutput?.markdown && linkedinPostsOutput.markdown.trim() !== "",
   );
   const githubHasOutput = Boolean(githubMarkdownOutput && githubMarkdownOutput.trim() !== "");
   const twitterHasOutput = Boolean(twitterMarkdownOutput && twitterMarkdownOutput.trim() !== "");
+  const linkedinHasOutput = Boolean(linkedinMarkdownOutput && linkedinMarkdownOutput.trim() !== "");
 
   const devpostStatusLabel = useMemo(() => toStatusLabel(devpostStatus), [devpostStatus]);
-  const linkedinStatusLabel = useMemo(() => toStatusLabel(linkedinStatus), [linkedinStatus]);
   const linkedinPostsStatusLabel = useMemo(
     () => toStatusLabel(linkedinPostsStatus),
     [linkedinPostsStatus],
   );
   const githubStatusLabel = useMemo(() => toStatusLabel(githubStatus), [githubStatus]);
   const twitterStatusLabel = useMemo(() => toStatusLabel(twitterStatus), [twitterStatus]);
+  const linkedinStatusLabel = useMemo(() => toStatusLabel(linkedinStatus), [linkedinStatus]);
 
   const resolveBrowserSession = async (
     sessionId: string | null,
@@ -347,45 +349,7 @@ export default function DevToolsPage() {
     }
   };
 
-  const handleRunLinkedin = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setLinkedinStatus("running");
-    setLinkedinError(null);
-    setLinkedinMarkdownOutput(null);
 
-    try {
-      const body = {
-        profileUrl: linkedinProfileUrl ?? "",
-        sessionId:
-          linkedinSessionId && linkedinSessionId.trim() !== "" ? linkedinSessionId : undefined,
-        maxSteps: toPositiveIntegerOrUndefined(linkedinMaxSteps),
-      };
-
-      const response = await fetch("/api/agents/linkedin", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
-
-      const json = (await response.json()) as { markdown?: string; error?: string };
-
-      if (!response.ok || !json.markdown) {
-        const message = json.error ?? "Failed to run Linkedin_agent.";
-        setLinkedinStatus("error");
-        setLinkedinError(message);
-        return;
-      }
-
-      setLinkedinStatus("success");
-      setLinkedinMarkdownOutput(json.markdown);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unexpected error.";
-      setLinkedinStatus("error");
-      setLinkedinError(message);
-    }
-  };
 
   const handleRunLinkedinPosts = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -547,6 +511,59 @@ export default function DevToolsPage() {
     }
   };
 
+  const handleRunLinkedin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLinkedinStatus("running");
+    setLinkedinError(null);
+    setLinkedinMarkdownOutput(null);
+    setLinkedinLiveUrl(null);
+    setLinkedinRunSessionId(null);
+
+    if (!linkedinProfileUrl || linkedinProfileUrl.trim() === "") {
+      setLinkedinStatus("error");
+      setLinkedinError("Add a LinkedIn profile URL.");
+      return;
+    }
+
+    try {
+      const requestedSessionId =
+        linkedinSessionId && linkedinSessionId.trim() !== "" ? linkedinSessionId.trim() : null;
+      const preparedSession = await resolveBrowserSession(requestedSessionId);
+      setLinkedinRunSessionId(preparedSession.sessionId);
+      setLinkedinLiveUrl(preparedSession.liveUrl);
+
+      const body = {
+        linkedinUrl: linkedinProfileUrl.trim(),
+        sessionId: preparedSession.sessionId,
+        maxSteps: toPositiveIntegerOrUndefined(linkedinMaxSteps),
+      };
+
+      const response = await fetch("/api/agents/linkedin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      const json = (await response.json()) as { markdown?: string; error?: string };
+
+      if (!response.ok || !json.markdown) {
+        const message = json.error ?? "Failed to run Linkedin_agent.";
+        setLinkedinStatus("error");
+        setLinkedinError(message);
+        return;
+      }
+
+      setLinkedinStatus("success");
+      setLinkedinMarkdownOutput(json.markdown);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unexpected error.";
+      setLinkedinStatus("error");
+      setLinkedinError(message);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100 sm:px-6">
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 lg:flex-row">
@@ -569,11 +586,10 @@ export default function DevToolsPage() {
                   key={agent.id}
                   type="button"
                   onClick={() => setSelectedAgent(agent.id)}
-                  className={`w-full rounded-lg border px-3 py-3 text-left transition ${
-                    isSelected
-                      ? "border-cyan-300 bg-cyan-300/10 text-cyan-100"
-                      : "border-slate-700 bg-slate-950 text-slate-200 hover:border-slate-500"
-                  }`}
+                  className={`w-full rounded-lg border px-3 py-3 text-left transition ${isSelected
+                    ? "border-cyan-300 bg-cyan-300/10 text-cyan-100"
+                    : "border-slate-700 bg-slate-950 text-slate-200 hover:border-slate-500"
+                    }`}
                 >
                   <div className="text-sm font-semibold">{agent.title}</div>
                   <div className="mt-1 text-xs text-slate-300">{agent.subtitle}</div>
@@ -710,99 +726,7 @@ export default function DevToolsPage() {
             </div>
           ) : null}
 
-          {selectedAgent === "linkedin" ? (
-            <div className="flex flex-col gap-6">
-              <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-                <h2 className="text-2xl font-semibold tracking-tight">LinkedIn Agent</h2>
-                <p className="mt-2 text-sm text-slate-300">
-                  Scrapes profile posts, experience, and projects into markdown.
-                </p>
-              </section>
 
-              <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-                <form className="flex flex-col gap-4" onSubmit={handleRunLinkedin}>
-                  <label className="flex flex-col gap-2 text-sm">
-                    LinkedIn Profile URL
-                    <input
-                      type="url"
-                      value={linkedinProfileUrl ?? ""}
-                      onChange={(event) => setLinkedinProfileUrl(event.target.value)}
-                      placeholder="https://www.linkedin.com/in/username/"
-                      required
-                      className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none ring-cyan-400/40 focus:ring-2"
-                    />
-                  </label>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="flex flex-col gap-2 text-sm">
-                      Session ID (optional)
-                      <input
-                        type="text"
-                        value={linkedinSessionId ?? ""}
-                        onChange={(event) => setLinkedinSessionId(event.target.value)}
-                        placeholder="reuse Browser Use session id"
-                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none ring-cyan-400/40 focus:ring-2"
-                      />
-                    </label>
-
-                    <label className="flex flex-col gap-2 text-sm">
-                      Max Steps (optional)
-                      <input
-                        type="number"
-                        min={1}
-                        value={linkedinMaxSteps ?? ""}
-                        onChange={(event) => setLinkedinMaxSteps(event.target.value)}
-                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none ring-cyan-400/40 focus:ring-2"
-                      />
-                    </label>
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap items-center gap-3">
-                    <button
-                      type="submit"
-                      disabled={linkedinIsRunning}
-                      className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
-                    >
-                      {linkedinIsRunning ? "Running..." : "Run Linkedin_agent"}
-                    </button>
-
-                    <span className="text-sm text-slate-300">Status: {linkedinStatusLabel}</span>
-                  </div>
-                </form>
-
-                {linkedinError ? (
-                  <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
-                    {linkedinError}
-                  </div>
-                ) : null}
-              </section>
-
-              <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-semibold">Markdown Output</h3>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      linkedinMarkdownOutput
-                        ? downloadMarkdown(
-                            linkedinMarkdownOutput,
-                            buildLinkedinFileName(linkedinProfileUrl),
-                          )
-                        : null
-                    }
-                    disabled={!linkedinHasOutput}
-                    className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-100 transition hover:border-cyan-300 hover:text-cyan-200 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-500"
-                  >
-                    Download .md
-                  </button>
-                </div>
-
-                <pre className="min-h-64 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-4 text-xs leading-6 text-slate-100">
-                  {linkedinMarkdownOutput ?? "No output yet. Run the agent to generate markdown."}
-                </pre>
-              </section>
-            </div>
-          ) : null}
 
           {selectedAgent === "linkedin-posts" ? (
             <div className="flex flex-col gap-6">
@@ -1232,8 +1156,134 @@ export default function DevToolsPage() {
               </section>
             </div>
           ) : null}
+
+          {selectedAgent === "linkedin" ? (
+            <div className="flex flex-col gap-6">
+              <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+                <h2 className="text-2xl font-semibold tracking-tight">LinkedIn Agent</h2>
+                <p className="mt-2 text-sm text-slate-300">
+                  Scrapes a LinkedIn profile for summary, activity, projects, interests, and images.
+                </p>
+              </section>
+
+              <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+                <form className="flex flex-col gap-4" onSubmit={handleRunLinkedin}>
+                  <label className="flex flex-col gap-2 text-sm">
+                    LinkedIn Profile URL
+                    <input
+                      type="url"
+                      value={linkedinProfileUrl ?? ""}
+                      onChange={(event) => setLinkedinProfileUrl(event.target.value)}
+                      placeholder="https://www.linkedin.com/in/username/"
+                      required
+                      className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none ring-cyan-400/40 focus:ring-2"
+                    />
+                  </label>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="flex flex-col gap-2 text-sm">
+                      Session ID (optional)
+                      <input
+                        type="text"
+                        value={linkedinSessionId ?? ""}
+                        onChange={(event) => setLinkedinSessionId(event.target.value)}
+                        placeholder="reuse Browser Use session id"
+                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none ring-cyan-400/40 focus:ring-2"
+                      />
+                    </label>
+
+                    <label className="flex flex-col gap-2 text-sm">
+                      Max Steps (optional)
+                      <input
+                        type="number"
+                        min={1}
+                        value={linkedinMaxSteps ?? ""}
+                        onChange={(event) => setLinkedinMaxSteps(event.target.value)}
+                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none ring-cyan-400/40 focus:ring-2"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <button
+                      type="submit"
+                      disabled={linkedinIsRunning}
+                      className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
+                    >
+                      {linkedinIsRunning ? "Running..." : "Run Linkedin_agent"}
+                    </button>
+
+                    <span className="text-sm text-slate-300">Status: {linkedinStatusLabel}</span>
+                  </div>
+                </form>
+
+                {linkedinError ? (
+                  <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+                    {linkedinError}
+                  </div>
+                ) : null}
+              </section>
+
+              <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold">Markdown Output</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!linkedinMarkdownOutput) {
+                        return;
+                      }
+
+                      downloadMarkdown(linkedinMarkdownOutput, buildLinkedinFileName(linkedinProfileUrl));
+                    }}
+                    disabled={!linkedinHasOutput}
+                    className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-100 transition hover:border-cyan-300 hover:text-cyan-200 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-500"
+                  >
+                    Download .md
+                  </button>
+                </div>
+
+                <pre className="min-h-64 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-4 text-xs leading-6 text-slate-100">
+                  {linkedinMarkdownOutput ?? "No output yet. Run the agent to generate markdown."}
+                </pre>
+              </section>
+
+              <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold">Browser Live View</h3>
+                  {linkedinLiveUrl ? (
+                    <a
+                      href={linkedinLiveUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-100 transition hover:border-cyan-300 hover:text-cyan-200"
+                    >
+                      Open in new tab
+                    </a>
+                  ) : null}
+                </div>
+
+                {linkedinRunSessionId ? (
+                  <p className="mb-3 text-xs text-slate-400">Session ID: {linkedinRunSessionId}</p>
+                ) : null}
+
+                {linkedinLiveUrl ? (
+                  <iframe
+                    title="LinkedIn Browser Live URL"
+                    src={linkedinLiveUrl}
+                    className="h-[640px] w-full rounded-lg border border-slate-800 bg-slate-950"
+                    allow="clipboard-read; clipboard-write"
+                  />
+                ) : (
+                  <div className="rounded-lg border border-slate-800 bg-slate-950 p-4 text-xs text-slate-400">
+                    No live URL yet. Run the agent to load the browser session in-frame.
+                  </div>
+                )}
+              </section>
+            </div>
+          ) : null}
         </section>
       </main>
-    </div>
+    </div >
   );
 }
