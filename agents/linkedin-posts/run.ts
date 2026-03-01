@@ -172,6 +172,7 @@ export const Linkedin_posts_agent: LinkedinPostsAgentRunner = async (
       allowedDomains: [...LINKEDIN_POSTS_ALLOWED_DOMAINS],
       schema: LinkedinPostsBrowserUseOutputSchema,
       systemPromptExtension: LINKEDIN_POSTS_AGENT_SYSTEM_PROMPT,
+      flashMode: true,
       ...(parsedInput.sessionId ? { sessionId: parsedInput.sessionId } : {}),
       ...(parsedInput.maxSteps ? { maxSteps: parsedInput.maxSteps } : {}),
     },

@@ -18,6 +18,7 @@ export const Devpost_agent: DevpostAgentRunner = async (
       allowedDomains: [...DEVPOST_ALLOWED_DOMAINS],
       schema: DevpostAgentStructuredOutputSchema,
       systemPromptExtension: DEVPOST_AGENT_SYSTEM_PROMPT,
+      flashMode: true,
       ...(parsedInput.sessionId ? { sessionId: parsedInput.sessionId } : {}),
       ...(parsedInput.maxSteps ? { maxSteps: parsedInput.maxSteps } : {}),
     },

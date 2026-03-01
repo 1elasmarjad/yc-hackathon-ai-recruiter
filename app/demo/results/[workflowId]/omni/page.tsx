@@ -19,34 +19,21 @@ type ActiveLiveRun = {
   sourceCandidateId: string | null;
 };
 
-type GridSlot = {
-  id: string;
-  row: number;
-  col: number;
-  isCenter: boolean;
-  mockAgentType: WorkflowAgentType;
-};
-
 type OmniTile = {
   id: string;
   agentType: WorkflowAgentType;
   title: string;
-  isCenter: boolean;
   isLive: boolean;
   liveUrl: string | null;
   candidateName: string | null;
   sourceCandidateId: string | null;
 };
 
-const NON_CENTER_AGENT_PATTERN: WorkflowAgentType[] = [
+const TOTAL_CELLS = 18;
+
+const SURROUNDING_AGENTS: WorkflowAgentType[] = [
   "linkedin",
   "github",
-  "linkedin_posts",
-  "devpost",
-  "linkedin",
-  "github",
-  "github",
-  "devpost",
   "linkedin_posts",
   "devpost",
   "linkedin",
@@ -54,15 +41,14 @@ const NON_CENTER_AGENT_PATTERN: WorkflowAgentType[] = [
   "devpost",
   "linkedin_posts",
   "linkedin",
+  "github",
+  "devpost",
+  "linkedin_posts",
   "linkedin",
   "github",
-  "linkedin_posts",
   "devpost",
   "github",
-  "linkedin",
   "linkedin_posts",
-  "devpost",
-  "github",
 ];
 
 function toTileTitle(agentType: WorkflowAgentType): string {
@@ -72,49 +58,6 @@ function toTileTitle(agentType: WorkflowAgentType): string {
 
   return `${WORKFLOW_AGENT_LABELS[agentType]} Agent`;
 }
-
-function buildGridSlots(): GridSlot[] {
-  const slots: GridSlot[] = [];
-  let nonCenterIndex = 0;
-
-  for (let row = 0; row < 4; row += 1) {
-    for (let col = 0; col < 6; col += 1) {
-      const inCenterBlock = (row === 1 || row === 2) && (col === 2 || col === 3);
-      const isCenterAnchor = row === 1 && col === 2;
-
-      if (inCenterBlock && !isCenterAnchor) {
-        continue;
-      }
-
-      if (isCenterAnchor) {
-        slots.push({
-          id: `cell-${row}-${col}`,
-          row,
-          col,
-          isCenter: true,
-          mockAgentType: "juicebox",
-        });
-        continue;
-      }
-
-      const nextMockAgentType =
-        NON_CENTER_AGENT_PATTERN[nonCenterIndex % NON_CENTER_AGENT_PATTERN.length];
-      nonCenterIndex += 1;
-
-      slots.push({
-        id: `cell-${row}-${col}`,
-        row,
-        col,
-        isCenter: false,
-        mockAgentType: nextMockAgentType,
-      });
-    }
-  }
-
-  return slots;
-}
-
-const GRID_SLOTS = buildGridSlots();
 
 function normalizeLiveRuns(runs: ActiveLiveRun[] | undefined): ActiveLiveRun[] {
   if (!runs) {
@@ -139,49 +82,47 @@ function buildOmniTiles(activeRuns: ActiveLiveRun[]): {
   tiles: OmniTile[];
   overflowCount: number;
 } {
-  const centerSlot = GRID_SLOTS.find((slot) => slot.isCenter);
-  if (!centerSlot) {
-    throw new Error("Missing center slot for omni grid.");
-  }
-
-  const nonCenterSlots = GRID_SLOTS.filter((slot) => !slot.isCenter);
   const remainingRuns = [...activeRuns];
-  const centerRunIndex = remainingRuns.findIndex(
+
+  // Juicebox is always first cell
+  const juiceboxRunIndex = remainingRuns.findIndex(
     (run) => run.agentType === "juicebox",
   );
-
-  let centerRun: ActiveLiveRun | null = null;
-  if (centerRunIndex >= 0) {
-    const selected = remainingRuns.splice(centerRunIndex, 1)[0];
-    centerRun = selected ?? null;
+  let juiceboxRun: ActiveLiveRun | null = null;
+  if (juiceboxRunIndex >= 0) {
+    const selected = remainingRuns.splice(juiceboxRunIndex, 1)[0];
+    juiceboxRun = selected ?? null;
   }
 
-  const tiles: OmniTile[] = [
-    {
-      id: centerSlot.id,
-      agentType: centerRun?.agentType ?? centerSlot.mockAgentType,
-      title: toTileTitle(centerRun?.agentType ?? centerSlot.mockAgentType),
-      isCenter: true,
-      isLive: Boolean(centerRun),
-      liveUrl: centerRun?.liveUrl ?? null,
-      candidateName: centerRun?.candidateName ?? null,
-      sourceCandidateId: centerRun?.sourceCandidateId ?? null,
-    },
-  ];
+  const allAgents: WorkflowAgentType[] = ["juicebox", ...SURROUNDING_AGENTS];
+  const tiles: OmniTile[] = [];
 
-  for (const slot of nonCenterSlots) {
-    const run = remainingRuns.shift() ?? null;
+  for (let i = 0; i < TOTAL_CELLS; i++) {
+    const mockAgentType = allAgents[i];
 
-    tiles.push({
-      id: slot.id,
-      agentType: run?.agentType ?? slot.mockAgentType,
-      title: toTileTitle(run?.agentType ?? slot.mockAgentType),
-      isCenter: false,
-      isLive: Boolean(run),
-      liveUrl: run?.liveUrl ?? null,
-      candidateName: run?.candidateName ?? null,
-      sourceCandidateId: run?.sourceCandidateId ?? null,
-    });
+    if (i === 0) {
+      // Juicebox cell
+      tiles.push({
+        id: `cell-${i}`,
+        agentType: juiceboxRun?.agentType ?? mockAgentType,
+        title: toTileTitle(juiceboxRun?.agentType ?? mockAgentType),
+        isLive: Boolean(juiceboxRun),
+        liveUrl: juiceboxRun?.liveUrl ?? null,
+        candidateName: juiceboxRun?.candidateName ?? null,
+        sourceCandidateId: juiceboxRun?.sourceCandidateId ?? null,
+      });
+    } else {
+      const run = remainingRuns.shift() ?? null;
+      tiles.push({
+        id: `cell-${i}`,
+        agentType: run?.agentType ?? mockAgentType,
+        title: toTileTitle(run?.agentType ?? mockAgentType),
+        isLive: Boolean(run),
+        liveUrl: run?.liveUrl ?? null,
+        candidateName: run?.candidateName ?? null,
+        sourceCandidateId: run?.sourceCandidateId ?? null,
+      });
+    }
   }
 
   return {
@@ -260,10 +201,6 @@ function WorkflowOmniDashboard({ workflowId }: { workflowId: string }) {
   }, [activeRunsQuery]);
 
   const tilesData = useMemo(() => buildOmniTiles(activeRuns), [activeRuns]);
-  const tilesById = useMemo(
-    () => new Map(tilesData.tiles.map((tile) => [tile.id, tile])),
-    [tilesData.tiles],
-  );
 
   if (isLoading) {
     return (
@@ -277,7 +214,7 @@ function WorkflowOmniDashboard({ workflowId }: { workflowId: string }) {
     return (
       <ErrorState
         title="Workflow not found"
-        message={`No workflow exists for id \"${workflowId}\".`}
+        message={`No workflow exists for id "${workflowId}".`}
       />
     );
   }
@@ -292,27 +229,35 @@ function WorkflowOmniDashboard({ workflowId }: { workflowId: string }) {
   }
 
   return (
-    <main className="min-h-screen w-full overflow-hidden bg-black p-2 text-slate-100 md:p-4">
-      <div className="mb-2 flex items-center justify-between px-2">
-        <h1 className="flex items-center gap-2 text-lg font-bold uppercase tracking-widest text-white">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-cyan-400"
+    <main className="min-h-screen w-full bg-black p-2 text-slate-100 md:p-3 flex flex-col font-sans">
+      <div className="mb-2 flex items-center justify-between px-2 text-slate-400">
+        <div className="flex items-center gap-4">
+          <Link
+            href={`/demo/results/${workflowId}`}
+            className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors bg-slate-900/50 border border-slate-700 hover:border-slate-500 rounded px-3 py-1.5"
           >
-            <path d="M2 12h4l2-9 5 18 3-9h6" />
-          </svg>
-          Workflow Omni View
-        </h1>
-
-        <div className="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+            Back to Results
+          </Link>
+          <h1 className="text-lg font-bold tracking-widest text-white uppercase flex items-center gap-2">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-cyan-400"
+            >
+              <path d="M2 12h4l2-9 5 18 3-9h6" />
+            </svg>
+            Workflow Omni View
+          </h1>
+        </div>
+        <div className="flex items-center gap-4 text-xs font-mono">
           <span
             className={`rounded border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${statusBadgeClasses(
               workflow.status,
@@ -320,122 +265,88 @@ function WorkflowOmniDashboard({ workflowId }: { workflowId: string }) {
           >
             Workflow: {workflow.status}
           </span>
-          <Link
-            href={`/demo/results/${workflowId}`}
-            className="rounded border border-slate-600/60 bg-slate-700/50 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-cyan-300 hover:text-cyan-200"
-          >
-            Back to Results
-          </Link>
+          <span className="flex items-center gap-1">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                workflow.status === "running" ? "animate-pulse bg-green-500" : "bg-slate-500"
+              }`}
+            />
+            {workflow.status === "running" ? "SYSTEM ONLINE" : "SYSTEM IDLE"}
+          </span>
+          <span className="flex items-center gap-2">
+            <span>ACTIVE SESSIONS: {activeRuns.length}</span>
+            {tilesData.overflowCount > 0 ? (
+              <span className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300">
+                +{tilesData.overflowCount} more
+              </span>
+            ) : null}
+          </span>
         </div>
       </div>
 
-      <div className="mb-3 flex items-center justify-between px-2 text-xs font-mono text-slate-400">
-        <span className="flex items-center gap-1">
-          <span
-            className={`h-2 w-2 rounded-full ${
-              workflow.status === "running" ? "animate-pulse bg-green-500" : "bg-slate-500"
-            }`}
-          />
-          {workflow.status === "running" ? "SYSTEM ONLINE" : "SYSTEM IDLE"}
-        </span>
-        <span className="flex items-center gap-2">
-          <span>ACTIVE SESSIONS: {activeRuns.length}</span>
-          {tilesData.overflowCount > 0 ? (
-            <span className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300">
-              +{tilesData.overflowCount} more
-            </span>
-          ) : null}
-        </span>
-      </div>
-
-      <div className="grid h-[calc(100vh-96px)] grid-cols-6 grid-rows-4 gap-2">
-        {GRID_SLOTS.map((slot) => {
-          const tile = tilesById.get(slot.id);
-          if (!tile) {
-            return null;
-          }
-
-          const containerClassName = slot.isCenter
-            ? "col-span-2 row-span-2 overflow-hidden rounded-xl border border-green-500/40 bg-slate-900/80 shadow-[0_0_15px_rgba(34,197,94,0.15)] ring-1 ring-green-400/20"
-            : "overflow-hidden rounded-lg border border-slate-800 bg-slate-900/60 transition-colors hover:border-cyan-500/50";
-
-          const sourceLabel =
-            tile.candidateName ?? tile.sourceCandidateId ?? (tile.isLive ? "workflow-level" : null);
+      <div className="grid grid-cols-3 gap-0 auto-rows-[300px]">
+        {tilesData.tiles.map((tile) => {
+          const isJuicebox = tile.agentType === "juicebox";
 
           return (
-            <article key={slot.id} className={containerClassName}>
-              <div className="flex h-full w-full flex-col p-2">
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`h-2 w-2 shrink-0 rounded-full ${
-                          tile.isLive
-                            ? "animate-pulse bg-green-500"
-                            : tile.agentType === "juicebox"
-                              ? "bg-green-500/70"
-                              : "bg-cyan-500"
-                        }`}
-                      />
-                      <span className="truncate text-xs font-semibold text-slate-300">
-                        {tile.title}
-                      </span>
-                    </div>
-                    {sourceLabel ? (
-                      <p className="truncate pl-4 text-[10px] text-slate-500">{sourceLabel}</p>
-                    ) : null}
-                  </div>
-
-                  <span className="font-mono text-[10px] text-slate-500">
-                    ID: {slot.id.replace("cell-", "")}
+            <div key={tile.id} className="w-full h-full">
+              <div className="flex w-full h-full flex-col relative group overflow-hidden bg-[#020510]">
+                {/* Title badge in top-left */}
+                <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
+                  <div
+                    className={`h-2 w-2 rounded-full ${
+                      tile.isLive
+                        ? "animate-pulse bg-green-500"
+                        : isJuicebox
+                          ? "bg-green-500"
+                          : "bg-cyan-500"
+                    }`}
+                  />
+                  <span className="text-xs font-semibold text-slate-300">
+                    {tile.title}
                   </span>
                 </div>
 
-                <div className="group relative flex flex-1 flex-col overflow-hidden rounded border border-slate-700 bg-slate-950">
-                  <div className="flex h-6 items-center gap-1.5 border-b border-slate-700 bg-slate-800 px-2 opacity-70 transition-opacity group-hover:opacity-100">
-                    <div className="h-2 w-2 rounded-full bg-red-500/50" />
-                    <div className="h-2 w-2 rounded-full bg-yellow-500/50" />
-                    <div className="h-2 w-2 rounded-full bg-green-500/50" />
-                    {tile.isLive && tile.liveUrl ? (
-                      <a
-                        href={tile.liveUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="ml-auto text-[10px] text-cyan-300 hover:text-cyan-200"
-                      >
-                        Open
-                      </a>
-                    ) : null}
-                  </div>
-
-                  {tile.isLive && tile.liveUrl ? (
+                {/* Live iframe or waiting placeholder */}
+                {tile.isLive && tile.liveUrl ? (
+                  <div className="flex-1 overflow-hidden mt-8 relative">
                     <iframe
                       src={tile.liveUrl}
                       title={`${tile.agentType}-${tile.id}`}
-                      className="h-full w-full border-0"
+                      className="absolute border-0"
+                      style={{
+                        top: "-140px",
+                        left: 0,
+                        width: "100%",
+                        height: "calc(100% + 140px)",
+                      }}
                       allow="clipboard-read; clipboard-write"
                     />
-                  ) : (
-                    <div className="flex flex-1 items-center justify-center px-3 text-center text-xs text-slate-600">
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center p-8">
+                    <span className="text-xs text-slate-600 font-mono">
                       Waiting for live stream...
-                    </div>
-                  )}
+                    </span>
+                  </div>
+                )}
 
-                  {tile.isCenter && !tile.isLive ? (
-                    <div className="absolute inset-0 flex flex-col justify-end border border-green-500/30 bg-slate-950/80 p-4 font-mono text-sm text-green-400">
-                      <div>&gt; Init juicebox candidate search...</div>
-                      <div className="animate-pulse">&gt; Monitoring workflow run_</div>
-                    </div>
-                  ) : null}
+                {/* Juicebox init text when not live */}
+                {isJuicebox && !tile.isLive ? (
+                  <div className="absolute bottom-0 left-0 right-0 p-4 pb-3 flex flex-col justify-end text-[11px] text-green-400 font-mono">
+                    <div>&gt; Init juicebox candidate search...</div>
+                    <div className="animate-pulse">&gt; Monitoring workflow run_</div>
+                  </div>
+                ) : null}
 
-                  {tile.isCenter && tile.isLive ? (
-                    <div className="pointer-events-none absolute right-2 top-8 rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
-                      Live
-                    </div>
-                  ) : null}
-                </div>
+                {/* Live badge for juicebox */}
+                {isJuicebox && tile.isLive ? (
+                  <div className="pointer-events-none absolute right-2 top-8 rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+                    Live
+                  </div>
+                ) : null}
               </div>
-            </article>
+            </div>
           );
         })}
       </div>

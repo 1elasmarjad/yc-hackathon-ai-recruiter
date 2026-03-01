@@ -1,284 +1,97 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useMemo, useState } from "react";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { useState, useEffect } from "react";
 
-type RunStatus = "idle" | "running" | "success" | "error";
+type AgentType = "juicebox" | "linkedin" | "github" | "linkedin-posts" | "devpost";
 
-type CriterionResult = {
-  criterion: string;
-  isFit: boolean;
-  evidence: string[];
-};
+interface GridCell {
+    id: string;
+    type: AgentType;
+    title: string;
+}
 
-type AssessmentResponse = {
-  isFit: boolean;
-  criteriaResults: CriterionResult[];
-};
+const generateCells = (): GridCell[] => {
+    const cells: GridCell[] = [];
 
-type UploadedCandidateDoc = {
-  fileName: string;
-  content: string;
-};
+    const surroundingAgents: AgentType[] = [
+        "linkedin", "github", "linkedin-posts", "devpost", "linkedin",
+        "github", "devpost", "linkedin-posts", "linkedin", "github", "devpost"
+    ];
 
-const ACCEPTED_FILE_TYPES =
-  ".md,.txt,text/markdown,text/plain,application/octet-stream";
+    const shuffledSurrounding = surroundingAgents.sort(() => Math.random() - 0.5);
 
-export default function AssessmentDevPage() {
-  const [aiCriteria, setAiCriteria] = useState<string | null>("");
-  const [candidateMarkdown, setCandidateMarkdown] = useState<string | null>("");
-  const [uploadedDocs, setUploadedDocs] = useState<UploadedCandidateDoc[]>([]);
-  const [status, setStatus] = useState<RunStatus>("idle");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [result, setResult] = useState<AssessmentResponse | null>(null);
+    const agentTypes: AgentType[] = ["juicebox", ...shuffledSurrounding];
 
-  const isRunning = status === "running";
-
-  const combinedDocumentCount = useMemo<number>(() => {
-    const manualCount = candidateMarkdown && candidateMarkdown.trim() !== "" ? 1 : 0;
-    return manualCount + uploadedDocs.length;
-  }, [candidateMarkdown, uploadedDocs]);
-
-  const resultJson = useMemo<string | null>(() => {
-    if (!result) {
-      return null;
-    }
-
-    return JSON.stringify(result, null, 2);
-  }, [result]);
-
-  async function handleFilesSelected(event: ChangeEvent<HTMLInputElement>): Promise<void> {
-    setErrorMessage(null);
-    const files = event.target.files;
-
-    if (!files || files.length === 0) {
-      setUploadedDocs([]);
-      return;
-    }
-
-    try {
-      const nextDocs: UploadedCandidateDoc[] = [];
-      for (const file of Array.from(files)) {
-        const content = await file.text();
-        if (content.trim() === "") {
-          continue;
+    for (let i = 0; i < 12; i++) {
+        const type = agentTypes[i];
+        let title = `${type.charAt(0).toUpperCase() + type.slice(1)} Agent`;
+        if (type === "linkedin-posts") {
+            title = "Posts Agent";
+        } else if (type === "juicebox") {
+            title = "Juicebox Agent";
         }
 
-        nextDocs.push({
-          fileName: file.name,
-          content,
+        cells.push({
+            id: `cell-${i}`,
+            type,
+            title,
         });
-      }
-
-      setUploadedDocs(nextDocs);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Could not read uploaded file.";
-      setErrorMessage(message);
-      setUploadedDocs([]);
-    }
-  }
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    setStatus("running");
-    setErrorMessage(null);
-    setResult(null);
-
-    const nextCriteria = aiCriteria?.trim() ?? "";
-    if (nextCriteria === "") {
-      setStatus("error");
-      setErrorMessage("AI criteria is required.");
-      return;
     }
 
-    const docs: string[] = [];
-    if (candidateMarkdown && candidateMarkdown.trim() !== "") {
-      docs.push(candidateMarkdown.trim());
-    }
+    return cells;
+};
 
-    for (const doc of uploadedDocs) {
-      if (doc.content.trim() !== "") {
-        docs.push(doc.content);
-      }
-    }
+export default function CommandCenterPage() {
+    const [cells, setCells] = useState<GridCell[]>([]);
 
-    if (docs.length === 0) {
-      setStatus("error");
-      setErrorMessage("Provide candidate markdown in text input and/or upload at least one file.");
-      return;
-    }
+    useEffect(() => {
+        setCells(generateCells());
+    }, []);
 
-    try {
-      const response = await fetch("/api/assessment", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          aiCriteria: nextCriteria,
-          candidateMarkdown: docs,
-        }),
-      });
+    const renderCellContent = (cell: GridCell) => {
+        return (
+            <div className="flex w-full h-full flex-col relative group rounded-lg border border-blue-500/30 overflow-hidden bg-[#020510] shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 hover:shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:border-blue-400/50">
+                <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
+                    <div className={`h-2 w-2 rounded-full ${cell.type === 'juicebox' ? 'bg-green-500 animate-pulse' : 'bg-cyan-500'}`} />
+                    <span className="text-xs font-semibold text-slate-300">{cell.title}</span>
+                </div>
 
-      const json = (await response.json()) as Partial<AssessmentResponse> & { error?: string };
-      if (!response.ok) {
-        throw new Error(json.error ?? "Assessment request failed.");
-      }
+                <div className="flex-1 flex items-center justify-center p-8">
+                    <span className="text-xs text-slate-600 font-mono">Waiting for live stream...</span>
+                </div>
 
-      if (typeof json.isFit !== "boolean" || !Array.isArray(json.criteriaResults)) {
-        throw new Error("Assessment response was not valid JSON shape.");
-      }
-
-      setResult({
-        isFit: json.isFit,
-        criteriaResults: json.criteriaResults,
-      });
-      setStatus("success");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unknown assessment error.";
-      setErrorMessage(message);
-      setStatus("error");
-    }
-  }
-
-  return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-100">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-8">
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/80 p-6">
-          <h1 className="text-xl font-semibold tracking-tight">
-            Assessment Dev Route
-          </h1>
-          <p className="mt-2 text-sm text-neutral-300">
-            Test candidate fit scoring against AI requirements. Assessment runs
-            through Convex action <code>assessment.assessCandidateFit</code>.
-          </p>
-        </section>
-
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/80 p-6">
-          <form className="flex flex-col gap-4" onSubmit={onSubmit}>
-            <label className="flex flex-col gap-2 text-sm">
-              <span className="font-medium">AI Requirement / Criteria</span>
-              <textarea
-                className="min-h-28 rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-neutral-500"
-                value={aiCriteria ?? ""}
-                onChange={(event) => setAiCriteria(event.target.value)}
-                placeholder="Example: Must have production AI experience, LLM evaluation work, and strong TypeScript."
-                required
-              />
-            </label>
-
-            <label className="flex flex-col gap-2 text-sm">
-              <span className="font-medium">Candidate Markdown / Text (manual)</span>
-              <textarea
-                className="min-h-40 rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-neutral-500"
-                value={candidateMarkdown ?? ""}
-                onChange={(event) => setCandidateMarkdown(event.target.value)}
-                placeholder="Paste one candidate markdown document here."
-              />
-            </label>
-
-            <label className="flex flex-col gap-2 text-sm">
-              <span className="font-medium">Upload Candidate Files (.md / .txt)</span>
-              <input
-                className="rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-neutral-200 file:px-3 file:py-1.5 file:text-neutral-900"
-                type="file"
-                accept={ACCEPTED_FILE_TYPES}
-                multiple
-                onChange={handleFilesSelected}
-              />
-            </label>
-
-            <div className="text-sm text-neutral-300">
-              Documents to assess: {combinedDocumentCount}
-            </div>
-
-            {uploadedDocs.length > 0 ? (
-              <ul className="flex flex-wrap gap-2 text-xs">
-                {uploadedDocs.map((doc, index) => (
-                  <li
-                    className="rounded-full border border-neutral-700 px-3 py-1 text-neutral-200"
-                    key={`${doc.fileName}-${index}`}
-                  >
-                    {doc.fileName}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-
-            <button
-              className="w-fit rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-neutral-900 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-              type="submit"
-              disabled={isRunning}
-            >
-              {isRunning ? "Assessing..." : "Run Assessment"}
-            </button>
-          </form>
-        </section>
-
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/80 p-6">
-          <div className="text-sm">
-            Status:{" "}
-            <span className="font-medium">
-              {status === "idle" ? "Ready" : status === "running" ? "Running" : status === "success" ? "Done" : "Error"}
-            </span>
-          </div>
-
-          {errorMessage ? (
-            <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-              {errorMessage}
-            </p>
-          ) : null}
-
-          {result ? (
-            <div className="mt-4 space-y-4">
-              <div className="flex items-center gap-3">
-                {result.isFit ? (
-                  <CheckCircle2 className="h-6 w-6 text-emerald-400" />
-                ) : (
-                  <XCircle className="h-6 w-6 text-red-400" />
-                )}
-                <span className="text-lg font-semibold">
-                  {result.isFit ? "Overall: Fit" : "Overall: Not Fit"}
-                </span>
-                <span className="text-sm text-neutral-400">
-                  {result.criteriaResults.filter((c) => c.isFit).length}/{result.criteriaResults.length} criteria met
-                </span>
-              </div>
-
-              <div className="rounded-xl border border-neutral-700 bg-neutral-950 divide-y divide-neutral-800">
-                {result.criteriaResults.map((cr, idx) => (
-                  <div key={idx} className="flex items-start gap-3 px-4 py-3">
-                    {cr.isFit ? (
-                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
-                    ) : (
-                      <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-sm text-neutral-100">{cr.criterion}</p>
-                      {cr.evidence.length > 0 ? (
-                        <ul className="mt-1 space-y-0.5">
-                          {cr.evidence.map((e, eIdx) => (
-                            <li key={eIdx} className="text-xs text-neutral-400">
-                              &mdash; {e}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
+                {cell.type === 'juicebox' && (
+                    <div className="absolute bottom-0 left-0 right-0 p-4 pb-3 flex flex-col justify-end text-[11px] text-green-400 font-mono">
+                        <div>&gt; Init juicebox candidate search...</div>
+                        <div className="animate-pulse">&gt; Analyzing profile data_</div>
                     </div>
-                  </div>
-                ))}
-              </div>
-
-              <details className="text-xs text-neutral-500">
-                <summary className="cursor-pointer hover:text-neutral-300">Raw JSON</summary>
-                <pre className="mt-2 overflow-x-auto rounded-xl border border-neutral-700 bg-neutral-950 p-4 leading-relaxed text-neutral-200">
-                  {resultJson}
-                </pre>
-              </details>
+                )}
             </div>
-          ) : null}
-        </section>
-      </div>
-    </main>
-  );
+        );
+    };
+
+    return (
+        <div className="min-h-screen w-full bg-black p-2 md:p-3 overflow-hidden flex flex-col font-sans">
+            <div className="mb-2 flex items-center justify-between px-2 text-slate-400">
+                <div className="flex items-center gap-4">
+                    <h1 className="text-lg font-bold tracking-widest text-white uppercase flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-cyan-400"><path d="M2 12h4l2-9 5 18 3-9h6" /></svg>
+                        Command Center
+                    </h1>
+                </div>
+                <div className="flex items-center gap-4 text-xs font-mono">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> SYSTEM ONLINE</span>
+                    <span>ACTIVE SESSIONS: 12</span>
+                </div>
+            </div>
+
+            <div className="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 grid-rows-3 gap-3 md:gap-4 h-[calc(100vh-60px)] px-2">
+                {cells.map((cell) => (
+                    <div key={cell.id} className="w-full h-full">
+                        {renderCellContent(cell)}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
 }
