@@ -27,6 +27,7 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "Exceptional ML engineer with deep production experience and strong open-source track record.",
     email: "elena.r@deepscale.ai",
+    startupVibe: null,
   },
   {
     id: "c-002",
@@ -45,6 +46,7 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "Research-oriented leader who bridges academia and production with proven startup DNA.",
     email: "marcus@nexuslabs.io",
+    startupVibe: null,
   },
   {
     id: "c-003",
@@ -63,6 +65,7 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "Strong ML platform background with acquisition experience and active OSS contributions.",
     email: "priya.s@databricks.com",
+    startupVibe: null,
   },
   {
     id: "c-004",
@@ -81,6 +84,7 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "YC-backed founder with deep LLM expertise and proven ability to scale teams.",
     email: "james@veridai.com",
+    startupVibe: null,
   },
   // 3 assessed + rejected
   {
@@ -100,6 +104,7 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "Solid data scientist but lacks open-source and startup background.",
     email: "sarah.kim@walmart.com",
+    startupVibe: null,
   },
   {
     id: "c-006",
@@ -118,6 +123,7 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "Too early in career for senior role requirements. Revisit in 2-3 years.",
     email: "apetrov@ibm.com",
+    startupVibe: null,
   },
   {
     id: "c-007",
@@ -136,6 +142,7 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "Strong ML engineer but no open-source presence is a concern for the role.",
     email: "diana.f@netflix.com",
+    startupVibe: null,
   },
   // 3 assessing
   {
@@ -155,6 +162,7 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "Currently evaluating open-source and startup criteria...",
     email: "raj.p@anthropic.com",
+    startupVibe: null,
   },
   {
     id: "c-009",
@@ -173,6 +181,7 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "Assessment in progress...",
     email: "lzhang@stripe.com",
+    startupVibe: null,
   },
   {
     id: "c-010",
@@ -191,6 +200,7 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "Two criteria assessed so far, both positive. Checking startup experience...",
     email: "tom@openai.com",
+    startupVibe: null,
   },
   // 4 pending
   {
@@ -210,6 +220,7 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "Queued for assessment.",
     email: "nina.k@meta.com",
+    startupVibe: null,
   },
   {
     id: "c-012",
@@ -228,6 +239,7 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "Queued for assessment.",
     email: "david@synthml.io",
+    startupVibe: null,
   },
   {
     id: "c-013",
@@ -246,6 +258,7 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "Queued for assessment.",
     email: "msantos@deepmind.com",
+    startupVibe: null,
   },
   {
     id: "c-014",
@@ -264,5 +277,6 @@ export const mockCandidates: PipelineCandidate[] = [
     ],
     summary: "Queued for assessment.",
     email: "chris.a@spotify.com",
+    startupVibe: null,
   },
 ];

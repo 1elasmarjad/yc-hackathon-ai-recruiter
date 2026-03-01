@@ -432,3 +432,41 @@ export const listWorkflowAgentRuns = query({
       .collect();
   },
 });
+
+export const setCandidateVapiCallId = mutation({
+  args: {
+    candidateId: v.id("candidates"),
+    vapiCallId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const candidate = await ctx.db.get(args.candidateId);
+
+    if (!candidate) {
+      throw new Error(`Candidate ${args.candidateId} not found.`);
+    }
+
+    await ctx.db.patch(args.candidateId, {
+      vapiCallId: args.vapiCallId,
+    });
+  },
+});
+
+export const setStartupVibeForCalledCandidates = mutation({
+  args: {
+    startupVibe: v.union(v.literal("yes"), v.literal("no")),
+  },
+  handler: async (ctx, args) => {
+    const allCandidates = await ctx.db.query("candidates").collect();
+    const calledCandidates = allCandidates.filter(
+      (candidate) => candidate.vapiCallId !== undefined,
+    );
+
+    await Promise.all(
+      calledCandidates.map((candidate) =>
+        ctx.db.patch(candidate._id, { startupVibe: args.startupVibe }),
+      ),
+    );
+
+    return { updatedCount: calledCandidates.length };
+  },
+});

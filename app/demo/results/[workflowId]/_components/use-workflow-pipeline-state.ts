@@ -191,6 +191,7 @@ function mapCandidate(candidate: CandidateDoc, criterionCatalog: string[]): Pipe
     linkedinUrl: candidate.linkedinUrl ?? null,
     githubUrl: candidate.githubUrl ?? null,
     error: candidate.error?.trim() ?? null,
+    startupVibe: candidate.startupVibe ?? null,
   };
 }
 

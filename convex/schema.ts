@@ -70,6 +70,8 @@ export default defineSchema({
         ),
       }),
     ),
+    vapiCallId: v.optional(v.string()),
+    startupVibe: v.optional(v.union(v.literal("yes"), v.literal("no"))),
   })
     .index("by_workflow", ["workflowId"])
     .index("by_workflow_status", ["workflowId", "status"])

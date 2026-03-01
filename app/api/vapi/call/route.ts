@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 
 const VAPI_ASSISTANT_ID = "6cb617d8-80d9-4c29-869e-980282763ac0";
-const VAPI_PHONE_NUMBER_ID = "8b9c691d-0f45-45c7-b7da-a4f3ad634246";
-const HARDCODED_CUSTOMER_NUMBER = "+16282325601";
+const VAPI_PHONE_NUMBER_ID = "9857a98e-62cf-448b-a0fb-75ce6212f723";
+const HARDCODED_CUSTOMER_NUMBER = "+12899521155";
 
 const SendCallRequestSchema = z.object({
   candidateId: z.string().min(1),
@@ -32,6 +35,14 @@ export async function POST(request: Request) {
   if (!vapiApiKey) {
     return NextResponse.json(
       { error: "Missing VAPI_API_KEY in environment." },
+      { status: 500 },
+    );
+  }
+
+  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!convexUrl) {
+    return NextResponse.json(
+      { error: "Missing NEXT_PUBLIC_CONVEX_URL in environment." },
       { status: 500 },
     );
   }
@@ -66,6 +77,12 @@ export async function POST(request: Request) {
       { status: 502 },
     );
   }
+
+  const convex = new ConvexHttpClient(convexUrl);
+  await convex.mutation(api.workflows.setCandidateVapiCallId, {
+    candidateId: parsed.data.candidateId as Id<"candidates">,
+    vapiCallId: vapiParsed.data.id,
+  });
 
   return NextResponse.json({
     callId: vapiParsed.data.id,

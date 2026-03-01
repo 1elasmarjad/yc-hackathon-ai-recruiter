@@ -25,6 +25,7 @@ export type PipelineCandidate = {
   linkedinUrl?: string | null;
   githubUrl?: string | null;
   error?: string | null;
+  startupVibe: "yes" | "no" | null;
 };
 
 export type PipelineStats = {
