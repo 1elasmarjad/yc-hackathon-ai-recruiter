@@ -167,11 +167,17 @@ function CommandCenterContent() {
       <div className="mb-1.5 flex items-center justify-between px-2 text-slate-400">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => router.push("/dev/assessment")}
+            onClick={() => {
+              if (workflowId) {
+                router.push(`/demo/results/${encodeURIComponent(workflowId)}`);
+              } else {
+                router.push("/demo");
+              }
+            }}
             className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors bg-slate-900/50 border border-slate-700 hover:border-slate-500 rounded px-3 py-1.5"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
-            Back to Assessment
+            Back to Results
           </button>
           <h1 className="text-lg font-bold tracking-widest text-white uppercase flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-cyan-400"><path d="M2 12h4l2-9 5 18 3-9h6" /></svg>
