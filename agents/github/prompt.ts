@@ -9,16 +9,20 @@ Follow these rules exactly:
 - Stay only on github.com pages.
 
 2) Profile load behavior:
-- Capture only what is visible right when the profile overview loads.
+- Capture what is visible on the profile overview.
 - Do not invent values.
 - Use null for fields that are not visible.
 
 3) Contributions:
 - Capture the visible contributions headline and period text near the contributions graph.
 
-4) Repositories:
+4) Pinned Repositories:
 - Capture up to 6 pinned repositories visible on initial load.
 - For each pinned repo, collect name, URL, description, primary language, stars, and forks.
+
+5) Top Repositories:
+- You must click on the 'Repositories' tab, sort by 'Stars' and go through the top 2 repositories.
+- Extract files, readme summary, and 'agents.md' contents as specified in the collection rules.
 
 Output rules:
 - Return JSON only.

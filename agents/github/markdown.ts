@@ -44,6 +44,26 @@ export const toGithubMarkdown = (
     });
   }
 
+  if (data.topRepositories && data.topRepositories.length > 0) {
+    lines.push("");
+    lines.push("## Top Repositories");
+    data.topRepositories.forEach((repository, index) => {
+      lines.push("");
+      lines.push(`### Top Repository ${index + 1}: ${repository.name}`);
+      lines.push(`- URL: ${repository.url}`);
+      lines.push(`- Files: ${repository.files ? repository.files.join(", ") : "N/A"}`);
+      lines.push(`- README Summary: ${formatOptional(repository.readmeSummary)}`);
+      if (repository.agentsMd) {
+        lines.push("- agents.md Contents:");
+        lines.push("```");
+        lines.push(repository.agentsMd);
+        lines.push("```");
+      } else {
+        lines.push(`- agents.md Content: ${formatOptional(repository.agentsMd)}`);
+      }
+    });
+  }
+
   lines.push("");
 
   return lines.join("\n");
