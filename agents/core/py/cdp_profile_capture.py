@@ -59,8 +59,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cdp-url", required=True, help="WebSocket CDP URL")
     parser.add_argument(
         "--match",
-        default="/api/search",
-        help="Substring to match search API responses",
+        default="/api/profile",
+        help="Substring to match profile API responses",
     )
     parser.add_argument(
         "--duration-seconds",
