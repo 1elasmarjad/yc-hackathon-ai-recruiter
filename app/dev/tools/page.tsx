@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 
 type RunStatus = "idle" | "running" | "success" | "error";
-type AgentId = "devpost" | "linkedin-posts" | "github" | "twitter" | "linkedin";
+type AgentId = "devpost" | "linkedin-posts" | "github" | "linkedin";
 
 type AgentDefinition = {
   id: AgentId;
@@ -57,11 +57,7 @@ const AGENT_DEFINITIONS: AgentDefinition[] = [
     title: "GitHub Agent",
     subtitle: "Contributions and pinned repos with stars",
   },
-  {
-    id: "twitter",
-    title: "Twitter/X Agent",
-    subtitle: "Top posts, replies, and interactions",
-  },
+
   {
     id: "linkedin",
     title: "LinkedIn Agent",
@@ -153,31 +149,7 @@ const buildLinkedinFileName = (profileUrl: string | null): string => {
   return `${username}-linkedin.md`;
 };
 
-const parseTwitterProfileUrls = (profileUrlsInput: string | null): string[] => {
-  if (!profileUrlsInput) {
-    return [];
-  }
 
-  return profileUrlsInput
-    .split(/\r?\n/g)
-    .map((line) => line.trim())
-    .filter((line) => line !== "");
-};
-
-const buildTwitterFileName = (profileUrls: string[]): string => {
-  if (profileUrls.length === 0) {
-    return "twitter-output.md";
-  }
-
-  const firstProfile = profileUrls[0];
-  const handle = firstProfile.replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//, "").split("/")[0];
-
-  if (!handle || handle.trim() === "") {
-    return "twitter-output.md";
-  }
-
-  return `${handle}-twitter.md`;
-};
 
 const buildDevpostFileName = (fullName: string | null): string => {
   if (!fullName || fullName.trim() === "") {
@@ -233,12 +205,7 @@ export default function DevToolsPage() {
   const [githubLiveUrl, setGithubLiveUrl] = useState<string | null>(null);
   const [githubRunSessionId, setGithubRunSessionId] = useState<string | null>(null);
 
-  const [twitterProfileUrlsInput, setTwitterProfileUrlsInput] = useState<string | null>("");
-  const [twitterSessionId, setTwitterSessionId] = useState<string | null>("");
-  const [twitterMaxSteps, setTwitterMaxSteps] = useState<string | null>("120");
-  const [twitterStatus, setTwitterStatus] = useState<RunStatus>("idle");
-  const [twitterError, setTwitterError] = useState<string | null>(null);
-  const [twitterMarkdownOutput, setTwitterMarkdownOutput] = useState<string | null>(null);
+
 
   const [linkedinProfileUrl, setLinkedinProfileUrl] = useState<string | null>("");
   const [linkedinSessionId, setLinkedinSessionId] = useState<string | null>("");
@@ -252,14 +219,12 @@ export default function DevToolsPage() {
   const devpostIsRunning = devpostStatus === "running";
   const linkedinPostsIsRunning = linkedinPostsStatus === "running";
   const githubIsRunning = githubStatus === "running";
-  const twitterIsRunning = twitterStatus === "running";
   const linkedinIsRunning = linkedinStatus === "running";
   const devpostHasOutput = Boolean(devpostMarkdownOutput && devpostMarkdownOutput.trim() !== "");
   const linkedinPostsHasOutput = Boolean(
     linkedinPostsOutput?.markdown && linkedinPostsOutput.markdown.trim() !== "",
   );
   const githubHasOutput = Boolean(githubMarkdownOutput && githubMarkdownOutput.trim() !== "");
-  const twitterHasOutput = Boolean(twitterMarkdownOutput && twitterMarkdownOutput.trim() !== "");
   const linkedinHasOutput = Boolean(linkedinMarkdownOutput && linkedinMarkdownOutput.trim() !== "");
 
   const devpostStatusLabel = useMemo(() => toStatusLabel(devpostStatus), [devpostStatus]);
@@ -268,7 +233,6 @@ export default function DevToolsPage() {
     [linkedinPostsStatus],
   );
   const githubStatusLabel = useMemo(() => toStatusLabel(githubStatus), [githubStatus]);
-  const twitterStatusLabel = useMemo(() => toStatusLabel(twitterStatus), [twitterStatus]);
   const linkedinStatusLabel = useMemo(() => toStatusLabel(linkedinStatus), [linkedinStatus]);
 
   const resolveBrowserSession = async (
@@ -411,52 +375,7 @@ export default function DevToolsPage() {
     }
   };
 
-  const handleRunTwitter = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setTwitterStatus("running");
-    setTwitterError(null);
-    setTwitterMarkdownOutput(null);
 
-    const profileUrls = parseTwitterProfileUrls(twitterProfileUrlsInput);
-
-    if (profileUrls.length === 0) {
-      setTwitterStatus("error");
-      setTwitterError("Add at least one X/Twitter profile URL.");
-      return;
-    }
-
-    try {
-      const body = {
-        profileUrls,
-        sessionId: twitterSessionId && twitterSessionId.trim() !== "" ? twitterSessionId : undefined,
-        maxSteps: toPositiveIntegerOrUndefined(twitterMaxSteps),
-      };
-
-      const response = await fetch("/api/agents/twitter", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
-
-      const json = (await response.json()) as { markdown?: string; error?: string };
-
-      if (!response.ok || !json.markdown) {
-        const message = json.error ?? "Failed to run Twitter_agent.";
-        setTwitterStatus("error");
-        setTwitterError(message);
-        return;
-      }
-
-      setTwitterStatus("success");
-      setTwitterMarkdownOutput(json.markdown);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unexpected error.";
-      setTwitterStatus("error");
-      setTwitterError(message);
-    }
-  };
 
   const handleRunGithub = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1060,102 +979,7 @@ export default function DevToolsPage() {
             </div>
           ) : null}
 
-          {selectedAgent === "twitter" ? (
-            <div className="flex flex-col gap-6">
-              <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-                <h2 className="text-2xl font-semibold tracking-tight">Twitter/X Agent</h2>
-                <p className="mt-2 text-sm text-slate-300">
-                  Scrapes top posts, replies, comments, and interactions into markdown.
-                </p>
-              </section>
 
-              <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-                <form className="flex flex-col gap-4" onSubmit={handleRunTwitter}>
-                  <label className="flex flex-col gap-2 text-sm">
-                    X/Twitter Profile URLs (one per line)
-                    <textarea
-                      value={twitterProfileUrlsInput ?? ""}
-                      onChange={(event) => setTwitterProfileUrlsInput(event.target.value)}
-                      placeholder={"https://x.com/user_one\nhttps://x.com/user_two"}
-                      required
-                      rows={5}
-                      className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none ring-cyan-400/40 focus:ring-2"
-                    />
-                  </label>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="flex flex-col gap-2 text-sm">
-                      Session ID (optional)
-                      <input
-                        type="text"
-                        value={twitterSessionId ?? ""}
-                        onChange={(event) => setTwitterSessionId(event.target.value)}
-                        placeholder="reuse Browser Use session id"
-                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none ring-cyan-400/40 focus:ring-2"
-                      />
-                    </label>
-
-                    <label className="flex flex-col gap-2 text-sm">
-                      Max Steps (optional)
-                      <input
-                        type="number"
-                        min={1}
-                        value={twitterMaxSteps ?? ""}
-                        onChange={(event) => setTwitterMaxSteps(event.target.value)}
-                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none ring-cyan-400/40 focus:ring-2"
-                      />
-                    </label>
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap items-center gap-3">
-                    <button
-                      type="submit"
-                      disabled={twitterIsRunning}
-                      className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
-                    >
-                      {twitterIsRunning ? "Running..." : "Run Twitter_agent"}
-                    </button>
-
-                    <span className="text-sm text-slate-300">Status: {twitterStatusLabel}</span>
-                  </div>
-                </form>
-
-                {twitterError ? (
-                  <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
-                    {twitterError}
-                  </div>
-                ) : null}
-              </section>
-
-              <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-semibold">Markdown Output</h3>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!twitterMarkdownOutput) {
-                        return;
-                      }
-
-                      const twitterProfileUrls = parseTwitterProfileUrls(twitterProfileUrlsInput);
-                      downloadMarkdown(
-                        twitterMarkdownOutput,
-                        buildTwitterFileName(twitterProfileUrls),
-                      );
-                    }}
-                    disabled={!twitterHasOutput}
-                    className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-100 transition hover:border-cyan-300 hover:text-cyan-200 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-500"
-                  >
-                    Download .md
-                  </button>
-                </div>
-
-                <pre className="min-h-64 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-4 text-xs leading-6 text-slate-100">
-                  {twitterMarkdownOutput ?? "No output yet. Run the agent to generate markdown."}
-                </pre>
-              </section>
-            </div>
-          ) : null}
 
           {selectedAgent === "linkedin" ? (
             <div className="flex flex-col gap-6">
