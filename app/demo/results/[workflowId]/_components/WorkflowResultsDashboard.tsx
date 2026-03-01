@@ -56,10 +56,10 @@ export function WorkflowResultsDashboard({
         agentRuns: candidateRuns,
         workflow: workflowState.workflow
           ? {
-              id: workflowState.workflow._id,
-              name: workflowState.workflow.name,
-              aiCriteria: workflowState.workflow.aiCriteria ?? null,
-            }
+            id: workflowState.workflow._id,
+            name: workflowState.workflow.name,
+            aiCriteria: workflowState.workflow.aiCriteria ?? null,
+          }
           : null,
       };
 
@@ -111,7 +111,9 @@ export function WorkflowResultsDashboard({
       statusLabel={workflowState.workflow.status}
       showCommandCenterButton
       commandCenterButtonLabel="Command Center"
-      onCommandCenterClick={() => router.push(`/demo/results/${workflowId}/omni`)}
+      onCommandCenterClick={() =>
+        router.push(`/command-center?workflowId=${encodeURIComponent(workflowId)}`)
+      }
       onOpenCandidateFetchedData={
         showFetchedDataButton ? handleOpenCandidateFetchedData : undefined
       }
