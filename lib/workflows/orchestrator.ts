@@ -218,6 +218,35 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
+/**
+ * Known name corrections keyed by LinkedIn username (the segment after /in/).
+ * Juicebox sometimes returns incorrect names — this map overrides them.
+ */
+const NAME_OVERRIDES_BY_LINKEDIN_USERNAME: Record<string, string> = {
+  jadelasmar: "Jad El Asmar",
+};
+
+function applyNameOverride(
+  linkedinUrl: string | null | undefined,
+  derivedName: string | undefined,
+): string | undefined {
+  if (!linkedinUrl) return derivedName;
+
+  try {
+    const pathname = new URL(linkedinUrl).pathname;
+    const segments = pathname.split("/").filter(Boolean);
+    if (segments[0]?.toLowerCase() === "in" && segments[1]) {
+      const username = decodeURIComponent(segments[1]).toLowerCase();
+      const override = NAME_OVERRIDES_BY_LINKEDIN_USERNAME[username];
+      if (override) return override;
+    }
+  } catch {
+    // invalid URL — fall through
+  }
+
+  return derivedName;
+}
+
 function buildCandidateSnapshot(payload: CoreUserPayload): CandidateSnapshot {
   const normalizedName = toOptionalString(payload.full_name);
   const firstName = toOptionalString(payload.first_name);
@@ -230,11 +259,14 @@ function buildCandidateSnapshot(payload: CoreUserPayload): CandidateSnapshot {
       .join(" ")
       .trim();
 
+  const linkedinUrl = normalizeHttpUrl(payload.linkedin_url);
+  const correctedName = applyNameOverride(linkedinUrl, derivedFullName || undefined);
+
   return {
     sourceCandidateId: payload.id,
-    name: toNullableString(normalizedName ?? null),
-    fullName: toNullableString(derivedFullName || null),
-    linkedinUrl: normalizeHttpUrl(payload.linkedin_url),
+    name: toNullableString(correctedName ?? normalizedName ?? null),
+    fullName: toNullableString(correctedName || null),
+    linkedinUrl,
     githubUrl: normalizeHttpUrl(payload.github_url),
   };
 }
