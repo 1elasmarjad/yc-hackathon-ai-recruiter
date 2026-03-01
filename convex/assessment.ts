@@ -5,7 +5,7 @@ import { v } from "convex/values";
 import { z } from "zod";
 import { action } from "./_generated/server";
 
-const DEFAULT_ASSESSMENT_MODEL = "openai/gpt-5-mini";
+const DEFAULT_ASSESSMENT_MODEL = "google/gemini-3.1-flash-image-preview";
 
 const CandidateMarkdownInputSchema = z.union([
   z.string().trim().min(1),

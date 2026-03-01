@@ -4,30 +4,52 @@ export type CriterionResult = {
   reasoning: string | null;
 };
 
-export type CandidateStatus = "pending" | "assessing" | "assessed";
+export type CandidateStatus = "pending" | "assessing" | "assessed" | "failed";
 
 export type AssessmentOutcome = "fit" | "rejected" | null; // null = not yet assessed
 
 export type PipelineCandidate = {
   id: string;
-  name: string;
-  headline: string;
-  location: string;
-  avatar: string; // initials-based
+  name: string | null;
+  sourceCandidateId?: string | null;
+  headline: string | null;
+  location: string | null;
+  avatar: string | null; // initials-based
   skills: string[];
-  yearsExperience: number;
+  yearsExperience: number | null;
   status: CandidateStatus;
   outcome: AssessmentOutcome;
   criteria: CriterionResult[];
-  summary: string;
-  email: string;
+  summary: string | null;
+  email: string | null;
+  linkedinUrl?: string | null;
+  githubUrl?: string | null;
+  error?: string | null;
 };
 
 export type PipelineStats = {
   total: number;
   pending: number;
+  assessing: number;
   fit: number;
   rejected: number;
+  failed: number;
 };
 
-export type StatusFilter = "all" | "pending" | "fit" | "rejected";
+export type StatusFilter =
+  | "all"
+  | "pending"
+  | "assessing"
+  | "fit"
+  | "rejected"
+  | "failed";
+
+export type PipelineState = {
+  candidates: PipelineCandidate[];
+  allCandidates: PipelineCandidate[];
+  selectedCandidate: PipelineCandidate | null;
+  selectCandidate: (id: string | null) => void;
+  stats: PipelineStats;
+  statusFilter: StatusFilter;
+  setStatusFilter: (next: StatusFilter) => void;
+};

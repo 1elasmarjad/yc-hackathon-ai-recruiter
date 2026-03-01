@@ -2,7 +2,13 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { mockCandidates } from "./mock-data";
-import type { PipelineCandidate, CriterionResult, PipelineStats, StatusFilter } from "./types";
+import type {
+  PipelineCandidate,
+  CriterionResult,
+  PipelineStats,
+  PipelineState,
+  StatusFilter,
+} from "./types";
 
 /**
  * Simulates a live drip-feed of criteria evaluations.
@@ -21,7 +27,7 @@ function useDripFeed(source: PipelineCandidate[]): PipelineCandidate[] {
     let accDelay = 600; // start after 600ms
 
     for (const c of source) {
-      if (c.status === "pending") continue;
+      if (c.status === "pending" || c.status === "failed") continue;
       for (let ci = 0; ci < c.criteria.length; ci++) {
         if (c.criteria[ci].met !== null) {
           items.push({ cid: c.id, ci, delay: accDelay });
@@ -50,7 +56,7 @@ function useDripFeed(source: PipelineCandidate[]): PipelineCandidate[] {
   // Apply the reveal mask to produce the live view
   return useMemo(() => {
     return source.map((c) => {
-      if (c.status === "pending") return c;
+      if (c.status === "pending" || c.status === "failed") return c;
 
       const revealedIdx = revealed.get(c.id) ?? -1;
       const liveCriteria: CriterionResult[] = c.criteria.map((cr, i) => {
@@ -68,24 +74,40 @@ function useDripFeed(source: PipelineCandidate[]): PipelineCandidate[] {
   }, [source, revealed]);
 }
 
-export function usePipelineState() {
+export function usePipelineState(): PipelineState {
   const [selectedId, setSelectedId] = useState<string | null>(mockCandidates[0]?.id ?? null);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilterState] = useState<StatusFilter>("all");
 
   const candidates = useDripFeed(mockCandidates);
 
   const stats: PipelineStats = useMemo(() => ({
     total: candidates.length,
     pending: candidates.filter((c) => c.status === "pending").length,
+    assessing: candidates.filter((c) => c.status === "assessing").length,
     fit: candidates.filter((c) => c.outcome === "fit").length,
     rejected: candidates.filter((c) => c.outcome === "rejected").length,
+    failed: candidates.filter((c) => c.status === "failed").length,
   }), [candidates]);
 
   const filtered = useMemo(() => {
-    if (statusFilter === "all") return candidates;
-    if (statusFilter === "pending") return candidates.filter((c) => c.status === "pending");
-    if (statusFilter === "fit") return candidates.filter((c) => c.outcome === "fit");
-    if (statusFilter === "rejected") return candidates.filter((c) => c.outcome === "rejected");
+    if (statusFilter === "all") {
+      return candidates;
+    }
+    if (statusFilter === "pending") {
+      return candidates.filter((c) => c.status === "pending");
+    }
+    if (statusFilter === "assessing") {
+      return candidates.filter((c) => c.status === "assessing");
+    }
+    if (statusFilter === "fit") {
+      return candidates.filter((c) => c.outcome === "fit");
+    }
+    if (statusFilter === "rejected") {
+      return candidates.filter((c) => c.outcome === "rejected");
+    }
+    if (statusFilter === "failed") {
+      return candidates.filter((c) => c.status === "failed");
+    }
     return candidates;
   }, [candidates, statusFilter]);
 
@@ -96,6 +118,10 @@ export function usePipelineState() {
 
   const selectCandidate = useCallback((id: string | null) => {
     setSelectedId(id);
+  }, []);
+
+  const setStatusFilter = useCallback((next: StatusFilter) => {
+    setStatusFilterState(next);
   }, []);
 
   return {
